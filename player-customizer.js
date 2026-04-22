@@ -40,6 +40,11 @@ const mouthFrameSlider = document.getElementById('mouthFrame');
 const mouthFrameVal = document.getElementById('mouthFrameVal');
 const cheekPicker = document.getElementById('cheekPicker');
 const skinColorInput = document.getElementById('skinColor');
+const topSilhouetteEl = document.getElementById('topSilhouette');
+const topTextureEl = document.getElementById('topTexture');
+const bottomSilhouetteEl = document.getElementById('bottomSilhouette');
+const bottomTextureEl = document.getElementById('bottomTexture');
+const shoesPickerEl = document.getElementById('shoesPicker');
 
 // ── Three.js setup ─────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -447,6 +452,240 @@ skinColorInput.addEventListener('input', () => {
   applySkinTint();
 });
 
+// ── Clothing data ─────────────────────────────────────────────────────────────
+const TOP_SILHOUETTES = [
+  { mesh: 'PlayerTopsTopTshirtsN', label: 'T-Shirt', texPrefix: 'TopsTexTopTshirtsN' },
+  { mesh: 'PlayerTopsTopTshirtsH', label: 'T-Shirt (short)', texPrefix: 'TopsTexTopTshirtsH' },
+  { mesh: 'PlayerTopsTopTshirtsL', label: 'T-Shirt (long)', texPrefix: 'TopsTexTopTshirtsL' },
+  { mesh: 'PlayerTopsTopYshirtsN', label: 'Y-Shirt', texPrefix: 'TopsTexTopYshirtsN' },
+  { mesh: 'PlayerTopsTopYshirtsL', label: 'Y-Shirt (long)', texPrefix: 'TopsTexTopYshirtsL' },
+  { mesh: 'PlayerTopsTopCoatL', label: 'Coat', texPrefix: 'TopsTexTopCoatL' },
+  { mesh: 'PlayerTopsTopOuterL', label: 'Outer', texPrefix: 'TopsTexTopOuterL' },
+  { mesh: 'PlayerTopsOnepieceAlineN', label: 'Dress A-Line', texPrefix: 'TopsTexOnepieceAlineN' },
+  { mesh: 'PlayerTopsOnepieceBalloonN', label: 'Dress Balloon', texPrefix: 'TopsTexOnepieceBalloonN' },
+  { mesh: 'PlayerTopsOnepieceBoxN', label: 'Dress Box', texPrefix: 'TopsTexOnepieceBoxN' },
+  { mesh: 'PlayerTopsOnepieceOverallN', label: 'Overall', texPrefix: 'TopsTexOnepieceOverallN' },
+  { mesh: 'PlayerTopsOnepieceRibN', label: 'Dress Rib', texPrefix: 'TopsTexOnepieceRibN' },
+];
+
+const BOTTOM_SILHOUETTES = [
+  { mesh: 'PlayerBottomsPantsNormal', label: 'Pants', texPrefix: 'BottomsTexPantsNormal' },
+  { mesh: 'PlayerBottomsPantsHalf', label: 'Shorts', texPrefix: 'BottomsTexPantsHalf' },
+  { mesh: 'PlayerBottomsPantsHot', label: 'Hot Pants', texPrefix: 'BottomsTexPantsHot' },
+  { mesh: 'PlayerBottomsPantsWide', label: 'Wide Pants', texPrefix: 'BottomsTexPantsWide' },
+  { mesh: 'PlayerBottomsSkirtAline', label: 'Skirt A-Line', texPrefix: 'BottomsTexSkirtAline' },
+  { mesh: 'PlayerBottomsSkirtBox', label: 'Skirt Box', texPrefix: 'BottomsTexSkirtBox' },
+  { mesh: 'PlayerBottomsSkirtLong', label: 'Skirt Long', texPrefix: 'BottomsTexSkirtLong' },
+];
+
+let clothingTextureLists = {};
+let topModel = null;
+let bottomModel = null;
+let shoesModel = null;
+
+async function scanClothingTextures(texPrefix) {
+  if (clothingTextureLists[texPrefix]) return clothingTextureLists[texPrefix];
+  try {
+    const resp = await fetch(`/api/scan-folders?prefix=${encodeURIComponent(texPrefix)}`);
+    if (!resp.ok) { clothingTextureLists[texPrefix] = []; return []; }
+    const folders = await resp.json();
+    clothingTextureLists[texPrefix] = folders;
+    return folders;
+  } catch {
+    clothingTextureLists[texPrefix] = [];
+    return [];
+  }
+}
+
+function populateTextureDropdown(selectEl, items, labelPrefix) {
+  selectEl.innerHTML = '';
+  if (items.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '—';
+    selectEl.append(opt);
+    return;
+  }
+  for (const item of items) {
+    const opt = document.createElement('option');
+    opt.value = item;
+    const name = item.replace(labelPrefix, '').replace(/(\d+)$/, ' $1');
+    opt.textContent = name || item;
+    selectEl.append(opt);
+  }
+}
+
+async function loadClothingModel(daeFolder, texFolder) {
+  const daeUrl = fileUrl(daeFolder, `${daeFolder}.dae`);
+  const resolvedTexFolder = texFolder || daeFolder;
+  const collada = await new Promise((resolve, reject) => {
+    const manager = new THREE.LoadingManager();
+    manager.setURLModifier((url) => {
+      let normalized = url;
+      try { normalized = decodeURIComponent(url); } catch (_) { /* keep original */ }
+      normalized = normalized.replace(/\\/g, '/');
+      const base = normalized.split('/').pop();
+      if (!base) return url;
+      if (base.toLowerCase().endsWith('.dae')) return fileUrl(daeFolder, base);
+      return fileUrl(resolvedTexFolder, base);
+    });
+    const loader = new ColladaLoader(manager);
+    loader.load(daeUrl, resolve, undefined, reject);
+  });
+  const model = collada.scene;
+  prepareModelMaterialsCustom(model);
+  return model;
+}
+
+function disposeModel(model) {
+  if (!model) return;
+  model.traverse((child) => {
+    if (child.isMesh || child.isSkinnedMesh) {
+      child.geometry.dispose();
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach((m) => { if (m) m.dispose(); });
+    }
+  });
+}
+
+async function loadTop(silIdx, texFolder) {
+  if (topModel) {
+    playerGroup.remove(topModel);
+    disposeModel(topModel);
+    topModel = null;
+  }
+  if (silIdx < 0 || !texFolder) return;
+  const sil = TOP_SILHOUETTES[silIdx];
+  try {
+    topModel = await loadClothingModel(sil.mesh, texFolder);
+    playerGroup.add(topModel);
+    topModel.updateMatrixWorld(true);
+  } catch (err) {
+    console.warn('Failed to load top:', err);
+  }
+}
+
+async function loadBottom(silIdx, texFolder) {
+  if (bottomModel) {
+    playerGroup.remove(bottomModel);
+    disposeModel(bottomModel);
+    bottomModel = null;
+  }
+  if (silIdx < 0 || !texFolder) return;
+  const sil = BOTTOM_SILHOUETTES[silIdx];
+  try {
+    bottomModel = await loadClothingModel(sil.mesh, texFolder);
+    playerGroup.add(bottomModel);
+    bottomModel.updateMatrixWorld(true);
+  } catch (err) {
+    console.warn('Failed to load bottom:', err);
+  }
+}
+
+async function loadShoes(folder) {
+  if (shoesModel) {
+    playerGroup.remove(shoesModel);
+    disposeModel(shoesModel);
+    shoesModel = null;
+  }
+  if (!folder) return;
+  try {
+    shoesModel = await loadClothingModel(folder, folder);
+    playerGroup.add(shoesModel);
+    shoesModel.updateMatrixWorld(true);
+  } catch (err) {
+    console.warn('Failed to load shoes:', err);
+  }
+}
+
+// ── Clothing pickers ──────────────────────────────────────────────────────────
+function populateClothingPickers() {
+  for (const [i, sil] of TOP_SILHOUETTES.entries()) {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = sil.label;
+    topSilhouetteEl.append(opt);
+  }
+  for (const [i, sil] of BOTTOM_SILHOUETTES.entries()) {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = sil.label;
+    bottomSilhouetteEl.append(opt);
+  }
+}
+
+async function populateShoesPicker() {
+  try {
+    const resp = await fetch('/api/scan-folders?prefix=Shoes');
+    if (!resp.ok) return;
+    const all = await resp.json();
+    const seen = new Set();
+    for (const name of all) {
+      if (!name.includes('.dae')) {
+        // Only add folders that contain a DAE (shoes folders have their own DAE)
+      }
+      if (seen.size >= 60) break;
+      if (seen.has(name)) continue;
+      seen.add(name);
+      const opt = document.createElement('option');
+      opt.value = name;
+      const label = name.replace(/^Shoes/, '').replace(/(\d+)$/, ' $1');
+      opt.textContent = label;
+      shoesPickerEl.append(opt);
+    }
+  } catch (err) {
+    console.warn('Failed to populate shoes picker:', err);
+  }
+}
+
+topSilhouetteEl.addEventListener('change', async () => {
+  const val = topSilhouetteEl.value;
+  if (!val) {
+    topTextureEl.innerHTML = '<option value="">—</option>';
+    if (topModel) { playerGroup.remove(topModel); disposeModel(topModel); topModel = null; }
+    return;
+  }
+  const sil = TOP_SILHOUETTES[Number(val)];
+  const textures = await scanClothingTextures(sil.texPrefix);
+  populateTextureDropdown(topTextureEl, textures, sil.texPrefix);
+  if (textures.length > 0) {
+    await loadTop(Number(val), textures[0]);
+  }
+});
+
+topTextureEl.addEventListener('change', async () => {
+  const silVal = topSilhouetteEl.value;
+  const texVal = topTextureEl.value;
+  if (!silVal || !texVal) return;
+  await loadTop(Number(silVal), texVal);
+});
+
+bottomSilhouetteEl.addEventListener('change', async () => {
+  const val = bottomSilhouetteEl.value;
+  if (!val) {
+    bottomTextureEl.innerHTML = '<option value="">—</option>';
+    if (bottomModel) { playerGroup.remove(bottomModel); disposeModel(bottomModel); bottomModel = null; }
+    return;
+  }
+  const sil = BOTTOM_SILHOUETTES[Number(val)];
+  const textures = await scanClothingTextures(sil.texPrefix);
+  populateTextureDropdown(bottomTextureEl, textures, sil.texPrefix);
+  if (textures.length > 0) {
+    await loadBottom(Number(val), textures[0]);
+  }
+});
+
+bottomTextureEl.addEventListener('change', async () => {
+  const silVal = bottomSilhouetteEl.value;
+  const texVal = bottomTextureEl.value;
+  if (!silVal || !texVal) return;
+  await loadBottom(Number(silVal), texVal);
+});
+
+shoesPickerEl.addEventListener('change', async () => {
+  await loadShoes(shoesPickerEl.value || null);
+});
+
 // ── Init ───────────────────────────────────────────────────────────────────────
 async function init() {
   populatePickers();
@@ -467,8 +706,12 @@ async function init() {
     applySkinTint();
 
     fitCameraToGroup();
+
+    populateClothingPickers();
+    populateShoesPicker();
+
     loadingEl.classList.add('hidden');
-    statusNote.textContent = 'Body + hair loaded. Customize away!';
+    statusNote.textContent = 'Ready — customize away!';
     console.log('Player customizer ready');
   } catch (err) {
     console.error('Failed to load player model:', err);
