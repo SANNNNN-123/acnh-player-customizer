@@ -124,11 +124,6 @@ function getCachedTexture(url, isColor, refTex) {
       tex.wrapS = refTex.wrapS;
       tex.wrapT = refTex.wrapT;
       tex.repeat.copy(refTex.repeat);
-    } else {
-      // COLLADA models use flipY=false; when there's no reference texture
-      // (e.g. eye/mouth textures that don't exist in the PlayerBody folder)
-      // we must set this explicitly or the texture renders in the wrong place.
-      tex.flipY = false;
     }
     textureCache.set(url, tex);
   }
@@ -167,15 +162,15 @@ function prepareModelMaterialsCustom(model) {
 function collectMaterialRefs(model, refs) {
   model.traverse((child) => {
     if (!child.isMesh && !child.isSkinnedMesh) return;
+    const meshName = (child.name || '').toLowerCase();
     const mats = Array.isArray(child.material) ? child.material : [child.material];
     for (const mat of mats) {
       if (!mat) continue;
-      const n = (mat.name || '').toLowerCase();
-      if (n === 'meye') refs.eye.push(mat);
-      else if (n === 'mmouth') refs.mouth.push(mat);
-      else if (n === 'mcheek') refs.cheek.push(mat);
-      else if (n === 'mskin') refs.skin.push(mat);
-      else if (n === 'mnose') refs.nose.push(mat);
+      if (meshName.includes('meye') || meshName.includes('_meye')) refs.eye.push(mat);
+      else if (meshName.includes('mmouth') || meshName.includes('_mmouth')) refs.mouth.push(mat);
+      else if (meshName.includes('mcheek') || meshName.includes('_mcheek')) refs.cheek.push(mat);
+      else if (meshName.includes('mnose') || meshName.includes('_mnose')) refs.nose.push(mat);
+      else if (meshName.includes('mskin') || meshName.includes('_mskin')) refs.skin.push(mat);
     }
   });
 }
