@@ -44,6 +44,8 @@ const topSilhouetteEl = document.getElementById('topSilhouette');
 const topTextureEl = document.getElementById('topTexture');
 const bottomSilhouetteEl = document.getElementById('bottomSilhouette');
 const bottomTextureEl = document.getElementById('bottomTexture');
+const hatCategoryEl = document.getElementById('hatCategory');
+const hatStyleEl = document.getElementById('hatStyle');
 const shoesPickerEl = document.getElementById('shoesPicker');
 
 // ── Three.js setup ─────────────────────────────────────────────────────────────
@@ -481,7 +483,19 @@ const BOTTOM_SILHOUETTES = [
 let clothingTextureLists = {};
 let topModel = null;
 let bottomModel = null;
+let hatModel = null;
 let shoesModel = null;
+
+const HAT_CATEGORIES = [
+  { prefix: 'CapHat', label: 'Hat' },
+  { prefix: 'CapBangs', label: 'Hat (with bangs)' },
+  { prefix: 'CapHelmet', label: 'Helmet' },
+  { prefix: 'CapCostume', label: 'Costume' },
+  { prefix: 'CapFullface', label: 'Full Face' },
+  { prefix: 'CapMask', label: 'Mask' },
+  { prefix: 'CapOrnament', label: 'Ornament' },
+  { prefix: 'CapWig', label: 'Wig' },
+];
 
 async function scanClothingTextures(texPrefix) {
   if (clothingTextureLists[texPrefix]) return clothingTextureLists[texPrefix];
@@ -598,6 +612,38 @@ async function loadShoes(folder) {
   }
 }
 
+async function loadHat(folder) {
+  if (hatModel) {
+    playerGroup.remove(hatModel);
+    disposeModel(hatModel);
+    hatModel = null;
+  }
+  if (!folder) return;
+  try {
+    hatModel = await loadClothingModel(folder, folder);
+    playerGroup.add(hatModel);
+
+    if (headBone) {
+      playerGroup.updateMatrixWorld(true);
+      const headWorldPos = new THREE.Vector3();
+      headBone.getWorldPosition(headWorldPos);
+      let hatRootBone = null;
+      hatModel.traverse((child) => {
+        if (child.isBone && child.name === 'Root') hatRootBone = child;
+      });
+      if (hatRootBone) {
+        const hatRootWorldPos = new THREE.Vector3();
+        hatRootBone.getWorldPosition(hatRootWorldPos);
+        hatModel.position.add(headWorldPos.clone().sub(hatRootWorldPos));
+      }
+    }
+
+    hatModel.updateMatrixWorld(true);
+  } catch (err) {
+    console.warn('Failed to load hat:', err);
+  }
+}
+
 // ── Clothing pickers ──────────────────────────────────────────────────────────
 function populateClothingPickers() {
   for (const [i, sil] of TOP_SILHOUETTES.entries()) {
@@ -637,6 +683,50 @@ async function populateShoesPicker() {
     console.warn('Failed to populate shoes picker:', err);
   }
 }
+
+function populateHatCategories() {
+  for (const cat of HAT_CATEGORIES) {
+    const opt = document.createElement('option');
+    opt.value = cat.prefix;
+    opt.textContent = cat.label;
+    hatCategoryEl.append(opt);
+  }
+}
+
+hatCategoryEl.addEventListener('change', async () => {
+  const prefix = hatCategoryEl.value;
+  hatStyleEl.innerHTML = '<option value="">—</option>';
+  if (!prefix) {
+    if (hatModel) { playerGroup.remove(hatModel); disposeModel(hatModel); hatModel = null; }
+    return;
+  }
+  try {
+    const resp = await fetch(`/api/scan-folders?prefix=${encodeURIComponent(prefix)}`);
+    if (!resp.ok) return;
+    const folders = await resp.json();
+    for (const name of folders) {
+      if (name.includes('UnderWater') || name.includes('Preview')) continue;
+      const opt = document.createElement('option');
+      opt.value = name;
+      const label = name.replace(prefix, '').replace(/(\d+)$/, ' $1');
+      opt.textContent = label || name;
+      hatStyleEl.append(opt);
+    }
+    if (folders.length > 0) {
+      const first = folders.find((n) => !n.includes('UnderWater') && !n.includes('Preview'));
+      if (first) {
+        hatStyleEl.value = first;
+        await loadHat(first);
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to populate hat styles:', err);
+  }
+});
+
+hatStyleEl.addEventListener('change', async () => {
+  await loadHat(hatStyleEl.value || null);
+});
 
 topSilhouetteEl.addEventListener('change', async () => {
   const val = topSilhouetteEl.value;
@@ -708,6 +798,7 @@ async function init() {
     fitCameraToGroup();
 
     populateClothingPickers();
+    populateHatCategories();
     populateShoesPicker();
 
     loadingEl.classList.add('hidden');
