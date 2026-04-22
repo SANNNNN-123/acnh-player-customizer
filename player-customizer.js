@@ -44,6 +44,7 @@ const topSilhouetteEl = document.getElementById('topSilhouette');
 const topTextureEl = document.getElementById('topTexture');
 const bottomSilhouetteEl = document.getElementById('bottomSilhouette');
 const bottomTextureEl = document.getElementById('bottomTexture');
+const randomizeBtn = document.getElementById('randomizeBtn');
 const hatCategoryEl = document.getElementById('hatCategory');
 const hatStyleEl = document.getElementById('hatStyle');
 const shoesPickerEl = document.getElementById('shoesPicker');
@@ -774,6 +775,80 @@ bottomTextureEl.addEventListener('change', async () => {
 
 shoesPickerEl.addEventListener('change', async () => {
   await loadShoes(shoesPickerEl.value || null);
+});
+
+// ── Randomizer ────────────────────────────────────────────────────────────────
+function pickRandom(selectEl) {
+  const opts = [...selectEl.options].filter((o) => o.value !== '');
+  if (opts.length === 0) return null;
+  const pick = opts[Math.floor(Math.random() * opts.length)];
+  selectEl.value = pick.value;
+  return pick.value;
+}
+
+randomizeBtn.addEventListener('click', async () => {
+  randomizeBtn.disabled = true;
+  randomizeBtn.textContent = 'Randomizing…';
+
+  try {
+    // Top — pick silhouette then load its textures and pick one
+    const topIdx = pickRandom(topSilhouetteEl);
+    let topPromise = Promise.resolve();
+    if (topIdx) {
+      const sil = TOP_SILHOUETTES[Number(topIdx)];
+      const textures = await scanClothingTextures(sil.texPrefix);
+      populateTextureDropdown(topTextureEl, textures, sil.texPrefix);
+      if (textures.length > 0) {
+        const tex = textures[Math.floor(Math.random() * textures.length)];
+        topTextureEl.value = tex;
+        topPromise = loadTop(Number(topIdx), tex);
+      }
+    }
+
+    // Bottom
+    const botIdx = pickRandom(bottomSilhouetteEl);
+    let bottomPromise = Promise.resolve();
+    if (botIdx) {
+      const sil = BOTTOM_SILHOUETTES[Number(botIdx)];
+      const textures = await scanClothingTextures(sil.texPrefix);
+      populateTextureDropdown(bottomTextureEl, textures, sil.texPrefix);
+      if (textures.length > 0) {
+        const tex = textures[Math.floor(Math.random() * textures.length)];
+        bottomTextureEl.value = tex;
+        bottomPromise = loadBottom(Number(botIdx), tex);
+      }
+    }
+
+    // Hat — pick category, populate styles, pick one
+    pickRandom(hatCategoryEl);
+    let hatPromise = Promise.resolve();
+    if (hatCategoryEl.value) {
+      const prefix = hatCategoryEl.value;
+      const resp = await fetch(`/api/scan-folders?prefix=${encodeURIComponent(prefix)}`);
+      if (resp.ok) {
+        const folders = await resp.json();
+        hatStyleEl.innerHTML = '<option value="">—</option>';
+        for (const name of folders) {
+          if (name.includes('UnderWater') || name.includes('Preview')) continue;
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name.replace(prefix, '').replace(/(\d+)$/, ' $1') || name;
+          hatStyleEl.append(opt);
+        }
+        pickRandom(hatStyleEl);
+        if (hatStyleEl.value) hatPromise = loadHat(hatStyleEl.value);
+      }
+    }
+
+    // Shoes
+    pickRandom(shoesPickerEl);
+    const shoesPromise = shoesPickerEl.value ? loadShoes(shoesPickerEl.value) : Promise.resolve();
+
+    await Promise.all([topPromise, bottomPromise, hatPromise, shoesPromise]);
+  } finally {
+    randomizeBtn.disabled = false;
+    randomizeBtn.textContent = 'Randomize';
+  }
 });
 
 // ── Init ───────────────────────────────────────────────────────────────────────

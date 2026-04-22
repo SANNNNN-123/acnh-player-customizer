@@ -352,6 +352,34 @@ canvas#viewer {
   pointer-events: auto;
 }
 
+/* ── Randomize button ──────────────────────────────── */
+.rpg-randomize-btn {
+  width: 100%;
+  padding: 10px 0;
+  font-family: Cinzel, serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #f0e6c8;
+  background: linear-gradient(180deg, rgba(201, 162, 39, 0.3) 0%, rgba(40, 32, 18, 0.95) 100%);
+  border: 2px solid rgba(201, 162, 39, 0.55);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.rpg-randomize-btn:hover {
+  border-color: #c9a227;
+  background: linear-gradient(180deg, rgba(201, 162, 39, 0.45) 0%, rgba(50, 40, 22, 0.95) 100%);
+  color: #ffe9a0;
+  box-shadow: 0 0 16px rgba(201, 162, 39, 0.2);
+}
+
+.rpg-randomize-btn:active {
+  transform: scale(0.97);
+}
+
 /* ── Responsive ─────────────────────────────────────── */
 @media (max-width: 900px) {
   #app-chrome {
