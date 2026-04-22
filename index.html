@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ACNH Player Customizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Crimson+Pro:ital,wght@0,500;0,600;1,500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/player-customizer.css" />
+  </head>
+  <body class="mmorpg-ui customizer-page">
+    <div id="info" class="rpg-title-bar">
+      <p class="rpg-server-line">Nook Inc. · Character Creation</p>
+      <h1 class="rpg-title">Player Customizer</h1>
+      <p class="rpg-hint">Drag to rotate · Scroll to zoom · Right-click to pan</p>
+    </div>
+
+    <div id="app-chrome" class="rpg-side-panel">
+      <p id="nameplate" class="rpg-char-nameplate" aria-live="polite">Player Character</p>
+
+      <div id="control-panel" class="rpg-control-panel">
+        <!-- Hair -->
+        <fieldset class="cust-section">
+          <legend class="cust-legend">Hair</legend>
+          <div class="custom-row">
+            <label for="hairPicker">Style</label>
+            <select id="hairPicker"></select>
+          </div>
+          <div class="custom-row">
+            <label for="hairColor">Color</label>
+            <input type="color" id="hairColor" value="#5b3a1a" />
+          </div>
+        </fieldset>
+
+        <!-- Eyes -->
+        <fieldset class="cust-section">
+          <legend class="cust-legend">Eyes</legend>
+          <div class="custom-row">
+            <label for="eyeStylePicker">Style</label>
+            <select id="eyeStylePicker"></select>
+          </div>
+          <div class="custom-row">
+            <label for="eyeFrame">Expression</label>
+            <input type="range" id="eyeFrame" min="0" max="15" value="0" />
+            <span id="eyeFrameVal" class="range-val">0</span>
+          </div>
+        </fieldset>
+
+        <!-- Mouth -->
+        <fieldset class="cust-section">
+          <legend class="cust-legend">Mouth</legend>
+          <div class="custom-row">
+            <label for="mouthStylePicker">Style</label>
+            <select id="mouthStylePicker"></select>
+          </div>
+          <div class="custom-row">
+            <label for="mouthFrame">Expression</label>
+            <input type="range" id="mouthFrame" min="0" max="8" value="0" />
+            <span id="mouthFrameVal" class="range-val">0</span>
+          </div>
+        </fieldset>
+
+        <!-- Face -->
+        <fieldset class="cust-section">
+          <legend class="cust-legend">Face</legend>
+          <div class="custom-row">
+            <label for="cheekPicker">Blush</label>
+            <select id="cheekPicker">
+              <option value="0">Style 0</option>
+              <option value="1">Style 1</option>
+              <option value="2">Style 2</option>
+            </select>
+          </div>
+          <div class="custom-row">
+            <label for="skinColor">Skin tint</label>
+            <input type="color" id="skinColor" value="#fdd5b1" />
+          </div>
+        </fieldset>
+
+        <p id="status-note" class="cust-note">Loading player model…</p>
+      </div>
+    </div>
+
+    <canvas id="viewer"></canvas>
+
+    <div id="loading">
+      <div class="spinner"></div>
+      <p>Loading player model…</p>
+    </div>
+
+    <script type="module" src="/player-customizer.js"></script>
+  </body>
+</html>

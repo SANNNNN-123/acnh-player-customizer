@@ -1,0 +1,47 @@
+/* Shared app navigation: Home · Player · Study · DAE Browser */
+#site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Pages where the nav is a direct child of body (not wrapped in #app-chrome) */
+body > #site-nav {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 100;
+}
+
+.site-nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  color: #cbeee7;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: inherit;
+  text-decoration: none;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+
+.site-nav-link:hover {
+  border-color: rgba(127, 219, 202, 0.45);
+  background: rgba(127, 219, 202, 0.1);
+  color: #e8fff8;
+}
+
+.site-nav-link.active {
+  border-color: #7fdbca;
+  background: rgba(127, 219, 202, 0.18);
+  color: #7fdbca;
+  pointer-events: none;
+}
