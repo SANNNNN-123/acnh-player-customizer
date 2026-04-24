@@ -100,6 +100,7 @@ scene.add(playerGroup);
 let bodyModel = null;
 let hairModel = null;
 let headBone = null; // Body's Head bone — hair attaches here
+let bodyTopWorldY = 0; // Head top in world space — used for hat vertical alignment
 
 // Material references found after loading body
 const matRefs = {
@@ -637,6 +638,12 @@ async function loadHat(folder) {
         hatRootBone.getWorldPosition(hatRootWorldPos);
         hatModel.position.add(headWorldPos.clone().sub(hatRootWorldPos));
       }
+
+      // CapHat models sit ON TOP of the head; other categories (Bangs, Helmet, etc.) envelope it
+      if (folder.startsWith('CapHat') && bodyTopWorldY > 0) {
+        const headHeight = bodyTopWorldY - headWorldPos.y;
+        hatModel.position.y += headHeight * 0.60;
+      }
     }
 
     hatModel.updateMatrixWorld(true);
@@ -871,6 +878,19 @@ async function init() {
     applySkinTint();
 
     fitCameraToGroup();
+
+    // Compute head-top Y for hat vertical alignment
+    playerGroup.updateMatrixWorld(true);
+    bodyModel.traverse((child) => {
+      if ((child.isMesh || child.isSkinnedMesh) && child.geometry) {
+        child.geometry.computeBoundingBox();
+        if (child.geometry.boundingBox) {
+          const geoBox = child.geometry.boundingBox.clone();
+          geoBox.applyMatrix4(child.matrixWorld);
+          bodyTopWorldY = Math.max(bodyTopWorldY, geoBox.max.y);
+        }
+      }
+    });
 
     populateClothingPickers();
     populateHatCategories();
