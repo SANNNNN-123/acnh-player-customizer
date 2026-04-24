@@ -7,152 +7,227 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Crimson+Pro:ital,wght@0,500;0,600;1,500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Cinzel:wght@600;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/player-customizer.css" />
   </head>
-  <body class="mmorpg-ui customizer-page">
-    <div id="info" class="rpg-title-bar">
-      <p class="rpg-server-line">Nook Inc. · Character Creation</p>
-      <h1 class="rpg-title">Player Customizer</h1>
-      <p class="rpg-hint">Drag to rotate · Scroll to zoom · Right-click to pan</p>
-    </div>
+  <body class="forge-app">
+    <canvas id="viewer" aria-label="Character preview"></canvas>
 
-    <div id="app-chrome" class="rpg-side-panel">
-      <p id="nameplate" class="rpg-char-nameplate" aria-live="polite">Player Character</p>
+    <div class="forge-shell">
+      <aside class="forge-panel forge-panel--outfit" aria-label="Outfit controls">
+        <div class="forge-panel__head">
+          <h2 class="forge-panel__title forge-panel__title--row">Outfit</h2>
+          <button type="button" id="randomizeBtn" class="forge-randomize forge-randomize--panel">
+            <svg class="forge-randomize__icon" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM7.5 18C6.67 18 6 17.33 6 16.5S6.67 15 7.5 15s1.5.67 1.5 1.5S8.33 18 7.5 18zm0-9C6.67 9 6 8.33 6 7.5S6.67 6 7.5 6 9 6.67 9 7.5 8.33 9 7.5 9zm4.5 4.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4.5 4.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm0-9c-.83 0-1.5-.67-1.5-1.5S15.67 6 16.5 6s1.5.67 1.5 1.5S17.33 9 16.5 9z"
+              />
+            </svg>
+            <span class="randomize-label">Randomize</span>
+          </button>
+        </div>
 
-      <div id="control-panel" class="rpg-control-panel">
-        <!-- Hair -->
-        <fieldset class="cust-section">
-          <legend class="cust-legend">Hair</legend>
-          <div class="custom-row">
-            <label for="hairPicker">Style</label>
-            <select id="hairPicker"></select>
+        <div class="forge-block">
+          <h3 class="forge-block__heading">Top</h3>
+          <div class="forge-field">
+            <span class="forge-field__label">Shape</span>
+            <div class="stepper" data-stepper>
+              <button type="button" class="stepper__arrow" data-step-prev aria-label="Previous top shape">‹</button>
+              <select id="topSilhouette" class="stepper__select" aria-label="Top shape">
+                <option value="">None</option>
+              </select>
+              <button type="button" class="stepper__arrow" data-step-next aria-label="Next top shape">›</button>
+            </div>
           </div>
-          <div class="custom-row">
-            <label for="hairColor">Color</label>
-            <input type="color" id="hairColor" value="#5b3a1a" />
+          <div class="forge-field">
+            <span class="forge-field__label">Style</span>
+            <div class="stepper" data-stepper>
+              <button type="button" class="stepper__arrow" data-step-prev aria-label="Previous top style">‹</button>
+              <select id="topTexture" class="stepper__select" aria-label="Top style">
+                <option value="">—</option>
+              </select>
+              <button type="button" class="stepper__arrow" data-step-next aria-label="Next top style">›</button>
+            </div>
           </div>
-        </fieldset>
+        </div>
 
-        <!-- Eyes -->
-        <fieldset class="cust-section">
-          <legend class="cust-legend">Eyes</legend>
-          <div class="custom-row">
-            <label for="eyeStylePicker">Style</label>
-            <select id="eyeStylePicker"></select>
+        <div class="forge-block">
+          <h3 class="forge-block__heading">Bottom</h3>
+          <div class="forge-field">
+            <span class="forge-field__label">Shape</span>
+            <div class="stepper" data-stepper>
+              <button type="button" class="stepper__arrow" data-step-prev aria-label="Previous bottom shape">‹</button>
+              <select id="bottomSilhouette" class="stepper__select" aria-label="Bottom shape">
+                <option value="">None</option>
+              </select>
+              <button type="button" class="stepper__arrow" data-step-next aria-label="Next bottom shape">›</button>
+            </div>
           </div>
-          <div class="custom-row">
-            <label for="eyeFrame">Expression</label>
+          <div class="forge-field">
+            <span class="forge-field__label">Style</span>
+            <div class="stepper" data-stepper>
+              <button type="button" class="stepper__arrow" data-step-prev aria-label="Previous bottom style">‹</button>
+              <select id="bottomTexture" class="stepper__select" aria-label="Bottom style">
+                <option value="">—</option>
+              </select>
+              <button type="button" class="stepper__arrow" data-step-next aria-label="Next bottom style">›</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="forge-block">
+          <h3 class="forge-block__heading">Hat</h3>
+          <div class="forge-field">
+            <span class="forge-field__label">Type</span>
+            <div class="stepper" data-stepper>
+              <button type="button" class="stepper__arrow" data-step-prev aria-label="Previous hat type">‹</button>
+              <select id="hatCategory" class="stepper__select" aria-label="Hat type">
+                <option value="">None</option>
+              </select>
+              <button type="button" class="stepper__arrow" data-step-next aria-label="Next hat type">›</button>
+            </div>
+          </div>
+          <div class="forge-field">
+            <span class="forge-field__label">Style</span>
+            <div class="stepper" data-stepper>
+              <button type="button" class="stepper__arrow" data-step-prev aria-label="Previous hat style">‹</button>
+              <select id="hatStyle" class="stepper__select" aria-label="Hat style">
+                <option value="">—</option>
+              </select>
+              <button type="button" class="stepper__arrow" data-step-next aria-label="Next hat style">›</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="forge-block">
+          <h3 class="forge-block__heading">Shoes</h3>
+          <div class="forge-field">
+            <span class="forge-field__label">Style</span>
+            <div class="stepper" data-stepper>
+              <button type="button" class="stepper__arrow" data-step-prev aria-label="Previous shoes">‹</button>
+              <select id="shoesPicker" class="stepper__select" aria-label="Shoes">
+                <option value="">None</option>
+              </select>
+              <button type="button" class="stepper__arrow" data-step-next aria-label="Next shoes">›</button>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <div class="forge-center">
+        <div id="preview-tags" class="preview-tags" aria-live="polite"></div>
+        <header class="preview-header">
+          <div class="preview-header__titles">
+            <p class="preview-header__kicker">Forge Studio — Character Creation</p>
+            <h1 class="preview-header__title">Player Customizer</h1>
+          </div>
+        </header>
+        <p class="preview-hint">Drag to rotate · Scroll to zoom · Right-click to pan</p>
+      </div>
+
+      <aside class="forge-panel forge-panel--face" aria-label="Face and body controls">
+        <h2 class="forge-panel__title">Face &amp; Body</h2>
+
+        <div class="forge-block">
+          <h3 class="forge-block__heading">Skin</h3>
+          <div class="forge-field forge-field--stack">
+            <span class="forge-field__label">Tone</span>
+            <div class="swatch-row">
+              <button type="button" class="swatch" data-skin="#ffe5d4" style="--swatch: #ffe5d4" aria-label="Skin tone light"></button>
+              <button type="button" class="swatch" data-skin="#f5cba8" style="--swatch: #f5cba8" aria-label="Skin tone"></button>
+              <button type="button" class="swatch" data-skin="#d4a574" style="--swatch: #d4a574" aria-label="Skin tone"></button>
+              <button type="button" class="swatch" data-skin="#b8875a" style="--swatch: #b8875a" aria-label="Skin tone"></button>
+              <button type="button" class="swatch" data-skin="#8d5e3c" style="--swatch: #8d5e3c" aria-label="Skin tone"></button>
+              <button type="button" class="swatch" data-skin="#5c3d28" style="--swatch: #5c3d28" aria-label="Skin tone dark"></button>
+              <label class="swatch swatch--rainbow" title="Custom skin color">
+                <input type="color" id="skinColor" value="#fdd5b1" />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="forge-block">
+          <h3 class="forge-block__heading">Hair</h3>
+          <div class="forge-field">
+            <span class="forge-field__label">Style</span>
+            <div class="stepper" data-stepper>
+              <button type="button" class="stepper__arrow" data-step-prev aria-label="Previous hair style">‹</button>
+              <select id="hairPicker" class="stepper__select" aria-label="Hair style"></select>
+              <button type="button" class="stepper__arrow" data-step-next aria-label="Next hair style">›</button>
+            </div>
+          </div>
+          <div class="forge-field forge-field--stack">
+            <span class="forge-field__label">Color</span>
+            <div class="swatch-row">
+              <button type="button" class="swatch" data-hair="#2c1810" style="--swatch: #2c1810" aria-label="Hair black brown"></button>
+              <button type="button" class="swatch" data-hair="#5b3a1a" style="--swatch: #5b3a1a" aria-label="Hair brown"></button>
+              <button type="button" class="swatch" data-hair="#8b4513" style="--swatch: #8b4513" aria-label="Hair auburn"></button>
+              <button type="button" class="swatch" data-hair="#c9a227" style="--swatch: #c9a227" aria-label="Hair blonde"></button>
+              <button type="button" class="swatch" data-hair="#e8d5a3" style="--swatch: #e8d5a3" aria-label="Hair light"></button>
+              <button type="button" class="swatch" data-hair="#c04040" style="--swatch: #c04040" aria-label="Hair red"></button>
+              <label class="swatch swatch--rainbow" title="Custom hair color">
+                <input type="color" id="hairColor" value="#5b3a1a" />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="forge-block">
+          <h3 class="forge-block__heading">Eyes</h3>
+          <div class="forge-field">
+            <span class="forge-field__label">Style</span>
+            <div class="stepper" data-stepper>
+              <button type="button" class="stepper__arrow" data-step-prev aria-label="Previous eye style">‹</button>
+              <select id="eyeStylePicker" class="stepper__select" aria-label="Eye style"></select>
+              <button type="button" class="stepper__arrow" data-step-next aria-label="Next eye style">›</button>
+            </div>
+          </div>
+          <div class="forge-field forge-field--slider">
+            <span class="forge-field__label">Expression</span>
             <input type="range" id="eyeFrame" min="0" max="15" value="0" />
-            <span id="eyeFrameVal" class="range-val">0</span>
+            <span id="eyeFrameVal" class="range-val">00</span>
           </div>
-        </fieldset>
+        </div>
 
-        <!-- Mouth -->
-        <fieldset class="cust-section">
-          <legend class="cust-legend">Mouth</legend>
-          <div class="custom-row">
-            <label for="mouthStylePicker">Style</label>
-            <select id="mouthStylePicker"></select>
+        <div class="forge-block">
+          <h3 class="forge-block__heading">Mouth</h3>
+          <div class="forge-field">
+            <span class="forge-field__label">Style</span>
+            <div class="stepper" data-stepper>
+              <button type="button" class="stepper__arrow" data-step-prev aria-label="Previous mouth style">‹</button>
+              <select id="mouthStylePicker" class="stepper__select" aria-label="Mouth style"></select>
+              <button type="button" class="stepper__arrow" data-step-next aria-label="Next mouth style">›</button>
+            </div>
           </div>
-          <div class="custom-row">
-            <label for="mouthFrame">Expression</label>
+          <div class="forge-field forge-field--slider">
+            <span class="forge-field__label">Expression</span>
             <input type="range" id="mouthFrame" min="0" max="8" value="0" />
-            <span id="mouthFrameVal" class="range-val">0</span>
+            <span id="mouthFrameVal" class="range-val">00</span>
           </div>
-        </fieldset>
+        </div>
 
-        <!-- Face -->
-        <fieldset class="cust-section">
-          <legend class="cust-legend">Face</legend>
-          <div class="custom-row">
-            <label for="cheekPicker">Blush</label>
-            <select id="cheekPicker">
-              <option value="0">Style 0</option>
-              <option value="1">Style 1</option>
-              <option value="2">Style 2</option>
-            </select>
+        <div class="forge-block">
+          <h3 class="forge-block__heading">Face</h3>
+          <div class="forge-field">
+            <span class="forge-field__label">Blush</span>
+            <div class="stepper" data-stepper>
+              <button type="button" class="stepper__arrow" data-step-prev aria-label="Previous blush">‹</button>
+              <select id="cheekPicker" class="stepper__select" aria-label="Blush style">
+                <option value="0">Style 0</option>
+                <option value="1">Style 1</option>
+                <option value="2">Style 2</option>
+              </select>
+              <button type="button" class="stepper__arrow" data-step-next aria-label="Next blush">›</button>
+            </div>
           </div>
-          <div class="custom-row">
-            <label for="skinColor">Skin tint</label>
-            <input type="color" id="skinColor" value="#fdd5b1" />
-          </div>
-        </fieldset>
+        </div>
 
-        <p id="status-note" class="cust-note">Loading player model…</p>
-      </div>
+        <p id="status-note" class="forge-status" role="status">Loading player model…</p>
+      </aside>
     </div>
-
-    <div id="clothing-panel" class="rpg-side-panel clothing-panel">
-      <button id="randomizeBtn" class="rpg-randomize-btn">Randomize</button>
-      <div id="clothing-control" class="rpg-control-panel">
-        <!-- Tops -->
-        <fieldset class="cust-section">
-          <legend class="cust-legend">Top</legend>
-          <div class="custom-row">
-            <label for="topSilhouette">Shape</label>
-            <select id="topSilhouette">
-              <option value="">None</option>
-            </select>
-          </div>
-          <div class="custom-row">
-            <label for="topTexture">Style</label>
-            <select id="topTexture">
-              <option value="">—</option>
-            </select>
-          </div>
-        </fieldset>
-
-        <!-- Bottoms -->
-        <fieldset class="cust-section">
-          <legend class="cust-legend">Bottom</legend>
-          <div class="custom-row">
-            <label for="bottomSilhouette">Shape</label>
-            <select id="bottomSilhouette">
-              <option value="">None</option>
-            </select>
-          </div>
-          <div class="custom-row">
-            <label for="bottomTexture">Style</label>
-            <select id="bottomTexture">
-              <option value="">—</option>
-            </select>
-          </div>
-        </fieldset>
-
-        <!-- Hat -->
-        <fieldset class="cust-section">
-          <legend class="cust-legend">Hat</legend>
-          <div class="custom-row">
-            <label for="hatCategory">Type</label>
-            <select id="hatCategory">
-              <option value="">None</option>
-            </select>
-          </div>
-          <div class="custom-row">
-            <label for="hatStyle">Style</label>
-            <select id="hatStyle">
-              <option value="">—</option>
-            </select>
-          </div>
-        </fieldset>
-
-        <!-- Shoes -->
-        <fieldset class="cust-section">
-          <legend class="cust-legend">Shoes</legend>
-          <div class="custom-row">
-            <label for="shoesPicker">Style</label>
-            <select id="shoesPicker">
-              <option value="">None</option>
-            </select>
-          </div>
-        </fieldset>
-      </div>
-    </div>
-
-    <canvas id="viewer"></canvas>
 
     <div id="loading">
       <div class="spinner"></div>

@@ -45,6 +45,7 @@ const topTextureEl = document.getElementById('topTexture');
 const bottomSilhouetteEl = document.getElementById('bottomSilhouette');
 const bottomTextureEl = document.getElementById('bottomTexture');
 const randomizeBtn = document.getElementById('randomizeBtn');
+const randomizeLabel = randomizeBtn?.querySelector('.randomize-label');
 const hatCategoryEl = document.getElementById('hatCategory');
 const hatStyleEl = document.getElementById('hatStyle');
 const shoesPickerEl = document.getElementById('shoesPicker');
@@ -390,6 +391,82 @@ async function loadHair(index) {
 }
 
 // ── Populate pickers ───────────────────────────────────────────────────────────
+function initSteppers() {
+  document.querySelectorAll('[data-stepper]').forEach((wrap) => {
+    const sel = wrap.querySelector('select');
+    const prev = wrap.querySelector('[data-step-prev]');
+    const next = wrap.querySelector('[data-step-next]');
+    if (!sel || !prev || !next) return;
+    const step = (delta) => {
+      const n = sel.options.length;
+      if (n <= 1) return;
+      sel.selectedIndex = (sel.selectedIndex + delta + n) % n;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    prev.addEventListener('click', () => step(-1));
+    next.addEventListener('click', () => step(1));
+  });
+}
+
+function normHex(c) {
+  const s = (c || '').trim().toLowerCase();
+  if (!s.startsWith('#')) return s;
+  if (s.length === 4) {
+    return `#${s[1]}${s[1]}${s[2]}${s[2]}${s[3]}${s[3]}`;
+  }
+  return s;
+}
+
+function syncSkinSwatchHighlight() {
+  const v = normHex(skinColorInput.value);
+  document.querySelectorAll('[data-skin]').forEach((btn) => {
+    btn.classList.toggle('swatch--on', normHex(btn.getAttribute('data-skin')) === v);
+  });
+}
+
+function syncHairSwatchHighlight() {
+  const v = normHex(hairColor.value);
+  document.querySelectorAll('[data-hair]').forEach((btn) => {
+    btn.classList.toggle('swatch--on', normHex(btn.getAttribute('data-hair')) === v);
+  });
+}
+
+function updatePreviewTags() {
+  const el = document.getElementById('preview-tags');
+  if (!el) return;
+  const parts = [];
+  if (topSilhouetteEl.value) {
+    const shape = topSilhouetteEl.options[topSilhouetteEl.selectedIndex]?.text ?? '';
+    const style =
+      topTextureEl.value && topTextureEl.selectedIndex >= 0
+        ? topTextureEl.options[topTextureEl.selectedIndex]?.text ?? ''
+        : '';
+    parts.push(style ? `${shape} - ${style}` : shape);
+  }
+  if (bottomSilhouetteEl.value) {
+    const shape = bottomSilhouetteEl.options[bottomSilhouetteEl.selectedIndex]?.text ?? '';
+    const style =
+      bottomTextureEl.value && bottomTextureEl.selectedIndex >= 0
+        ? bottomTextureEl.options[bottomTextureEl.selectedIndex]?.text ?? ''
+        : '';
+    parts.push(style ? `${shape} - ${style}` : shape);
+  }
+  if (hatCategoryEl.value && hatStyleEl.value) {
+    parts.push(hatStyleEl.options[hatStyleEl.selectedIndex]?.text ?? '');
+  }
+  if (shoesPickerEl.value) {
+    parts.push(shoesPickerEl.options[shoesPickerEl.selectedIndex]?.text ?? '');
+  }
+  el.replaceChildren(
+    ...parts.map((t) => {
+      const span = document.createElement('span');
+      span.className = 'preview-tag';
+      span.textContent = t.toUpperCase();
+      return span;
+    }),
+  );
+}
+
 function populatePickers() {
   for (let i = 0; i < HAIR_COUNT; i++) {
     const opt = document.createElement('option');
@@ -421,6 +498,7 @@ hairPicker.addEventListener('change', async () => {
 
 hairColor.addEventListener('input', () => {
   state.hairColor = hairColor.value;
+  syncHairSwatchHighlight();
   applyHairColor();
 });
 
@@ -431,7 +509,7 @@ eyeStylePicker.addEventListener('change', () => {
 
 eyeFrameSlider.addEventListener('input', () => {
   state.eyeFrame = Number(eyeFrameSlider.value);
-  eyeFrameVal.textContent = state.eyeFrame;
+  eyeFrameVal.textContent = pad2(state.eyeFrame);
   applyEyeTextures();
 });
 
@@ -442,7 +520,7 @@ mouthStylePicker.addEventListener('change', () => {
 
 mouthFrameSlider.addEventListener('input', () => {
   state.mouthFrame = Number(mouthFrameSlider.value);
-  mouthFrameVal.textContent = state.mouthFrame;
+  mouthFrameVal.textContent = pad2(state.mouthFrame);
   applyMouthTextures();
 });
 
@@ -453,7 +531,30 @@ cheekPicker.addEventListener('change', () => {
 
 skinColorInput.addEventListener('input', () => {
   state.skinColor = skinColorInput.value;
+  syncSkinSwatchHighlight();
   applySkinTint();
+});
+
+document.querySelectorAll('[data-skin]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const hex = btn.getAttribute('data-skin');
+    if (!hex) return;
+    skinColorInput.value = hex;
+    state.skinColor = hex;
+    syncSkinSwatchHighlight();
+    applySkinTint();
+  });
+});
+
+document.querySelectorAll('[data-hair]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const hex = btn.getAttribute('data-hair');
+    if (!hex) return;
+    hairColor.value = hex;
+    state.hairColor = hex;
+    syncHairSwatchHighlight();
+    applyHairColor();
+  });
 });
 
 // ── Clothing data ─────────────────────────────────────────────────────────────
@@ -704,11 +805,11 @@ function populateHatCategories() {
 hatCategoryEl.addEventListener('change', async () => {
   const prefix = hatCategoryEl.value;
   hatStyleEl.innerHTML = '<option value="">—</option>';
-  if (!prefix) {
-    if (hatModel) { playerGroup.remove(hatModel); disposeModel(hatModel); hatModel = null; }
-    return;
-  }
   try {
+    if (!prefix) {
+      if (hatModel) { playerGroup.remove(hatModel); disposeModel(hatModel); hatModel = null; }
+      return;
+    }
     const resp = await fetch(`/api/scan-folders?prefix=${encodeURIComponent(prefix)}`);
     if (!resp.ok) return;
     const folders = await resp.json();
@@ -729,25 +830,32 @@ hatCategoryEl.addEventListener('change', async () => {
     }
   } catch (err) {
     console.warn('Failed to populate hat styles:', err);
+  } finally {
+    updatePreviewTags();
   }
 });
 
 hatStyleEl.addEventListener('change', async () => {
   await loadHat(hatStyleEl.value || null);
+  updatePreviewTags();
 });
 
 topSilhouetteEl.addEventListener('change', async () => {
-  const val = topSilhouetteEl.value;
-  if (!val) {
-    topTextureEl.innerHTML = '<option value="">—</option>';
-    if (topModel) { playerGroup.remove(topModel); disposeModel(topModel); topModel = null; }
-    return;
-  }
-  const sil = TOP_SILHOUETTES[Number(val)];
-  const textures = await scanClothingTextures(sil.texPrefix);
-  populateTextureDropdown(topTextureEl, textures, sil.texPrefix);
-  if (textures.length > 0) {
-    await loadTop(Number(val), textures[0]);
+  try {
+    const val = topSilhouetteEl.value;
+    if (!val) {
+      topTextureEl.innerHTML = '<option value="">—</option>';
+      if (topModel) { playerGroup.remove(topModel); disposeModel(topModel); topModel = null; }
+      return;
+    }
+    const sil = TOP_SILHOUETTES[Number(val)];
+    const textures = await scanClothingTextures(sil.texPrefix);
+    populateTextureDropdown(topTextureEl, textures, sil.texPrefix);
+    if (textures.length > 0) {
+      await loadTop(Number(val), textures[0]);
+    }
+  } finally {
+    updatePreviewTags();
   }
 });
 
@@ -756,20 +864,25 @@ topTextureEl.addEventListener('change', async () => {
   const texVal = topTextureEl.value;
   if (!silVal || !texVal) return;
   await loadTop(Number(silVal), texVal);
+  updatePreviewTags();
 });
 
 bottomSilhouetteEl.addEventListener('change', async () => {
-  const val = bottomSilhouetteEl.value;
-  if (!val) {
-    bottomTextureEl.innerHTML = '<option value="">—</option>';
-    if (bottomModel) { playerGroup.remove(bottomModel); disposeModel(bottomModel); bottomModel = null; }
-    return;
-  }
-  const sil = BOTTOM_SILHOUETTES[Number(val)];
-  const textures = await scanClothingTextures(sil.texPrefix);
-  populateTextureDropdown(bottomTextureEl, textures, sil.texPrefix);
-  if (textures.length > 0) {
-    await loadBottom(Number(val), textures[0]);
+  try {
+    const val = bottomSilhouetteEl.value;
+    if (!val) {
+      bottomTextureEl.innerHTML = '<option value="">—</option>';
+      if (bottomModel) { playerGroup.remove(bottomModel); disposeModel(bottomModel); bottomModel = null; }
+      return;
+    }
+    const sil = BOTTOM_SILHOUETTES[Number(val)];
+    const textures = await scanClothingTextures(sil.texPrefix);
+    populateTextureDropdown(bottomTextureEl, textures, sil.texPrefix);
+    if (textures.length > 0) {
+      await loadBottom(Number(val), textures[0]);
+    }
+  } finally {
+    updatePreviewTags();
   }
 });
 
@@ -778,10 +891,12 @@ bottomTextureEl.addEventListener('change', async () => {
   const texVal = bottomTextureEl.value;
   if (!silVal || !texVal) return;
   await loadBottom(Number(silVal), texVal);
+  updatePreviewTags();
 });
 
 shoesPickerEl.addEventListener('change', async () => {
   await loadShoes(shoesPickerEl.value || null);
+  updatePreviewTags();
 });
 
 // ── Randomizer ────────────────────────────────────────────────────────────────
@@ -795,7 +910,7 @@ function pickRandom(selectEl) {
 
 randomizeBtn.addEventListener('click', async () => {
   randomizeBtn.disabled = true;
-  randomizeBtn.textContent = 'Randomizing…';
+  if (randomizeLabel) randomizeLabel.textContent = 'Randomizing…';
 
   try {
     // Top — pick silhouette then load its textures and pick one
@@ -852,9 +967,10 @@ randomizeBtn.addEventListener('click', async () => {
     const shoesPromise = shoesPickerEl.value ? loadShoes(shoesPickerEl.value) : Promise.resolve();
 
     await Promise.all([topPromise, bottomPromise, hatPromise, shoesPromise]);
+    updatePreviewTags();
   } finally {
     randomizeBtn.disabled = false;
-    randomizeBtn.textContent = 'Randomize';
+    if (randomizeLabel) randomizeLabel.textContent = 'Randomize';
   }
 });
 
@@ -894,7 +1010,12 @@ async function init() {
 
     populateClothingPickers();
     populateHatCategories();
-    populateShoesPicker();
+    await populateShoesPicker();
+
+    initSteppers();
+    syncSkinSwatchHighlight();
+    syncHairSwatchHighlight();
+    updatePreviewTags();
 
     loadingEl.classList.add('hidden');
     statusNote.textContent = 'Ready — customize away!';
