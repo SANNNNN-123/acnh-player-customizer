@@ -39,7 +39,6 @@ const eyeFrameVal = document.getElementById('eyeFrameVal');
 const mouthStylePicker = document.getElementById('mouthStylePicker');
 const mouthFrameSlider = document.getElementById('mouthFrame');
 const mouthFrameVal = document.getElementById('mouthFrameVal');
-const cheekPicker = document.getElementById('cheekPicker');
 const skinColorInput = document.getElementById('skinColor');
 const topSilhouetteEl = document.getElementById('topSilhouette');
 const topTextureEl = document.getElementById('topTexture');
@@ -108,7 +107,6 @@ let bodyTopWorldY = 0; // Head top in world space — used for hat vertical alig
 const matRefs = {
   eye: [],    // materials named mEye
   mouth: [],  // materials named mMouth
-  cheek: [],  // materials named mCheek
   skin: [],   // materials named mSkin
   nose: [],   // materials named mNose
   hair: [],   // materials from hair model
@@ -120,7 +118,6 @@ const state = {
   eyeFrame: 0,
   mouthStyle: 0,
   mouthFrame: 0,
-  cheekIndex: 0,
   skinColor: '#fdd5b1',
   hairColor: '#5b3a1a',
 };
@@ -179,7 +176,6 @@ function collectMaterialRefs(model, refs) {
       if (!mat) continue;
       if (meshName.includes('meye') || meshName.includes('_meye')) refs.eye.push(mat);
       else if (meshName.includes('mmouth') || meshName.includes('_mmouth')) refs.mouth.push(mat);
-      else if (meshName.includes('mcheek') || meshName.includes('_mcheek')) refs.cheek.push(mat);
       else if (meshName.includes('mnose') || meshName.includes('_mnose')) refs.nose.push(mat);
       else if (meshName.includes('mskin') || meshName.includes('_mskin')) refs.skin.push(mat);
     }
@@ -265,18 +261,6 @@ function applyMouthTextures() {
   }
 }
 
-function applyCheekTexture() {
-  const idx = state.cheekIndex;
-  for (const mat of matRefs.cheek) {
-    setMaterialTextures(
-      mat,
-      fileUrl('PlayerBody', `mCheek_Alb.${idx}.png`),
-      null,
-      null,
-    );
-  }
-}
-
 function applySkinTint() {
   const color = new THREE.Color(state.skinColor);
   for (const mat of matRefs.skin) {
@@ -284,10 +268,6 @@ function applySkinTint() {
     mat.needsUpdate = true;
   }
   for (const mat of matRefs.nose) {
-    mat.color.copy(color);
-    mat.needsUpdate = true;
-  }
-  for (const mat of matRefs.cheek) {
     mat.color.copy(color);
     mat.needsUpdate = true;
   }
@@ -309,6 +289,11 @@ async function loadBody() {
   playerGroup.add(bodyModel);
   bodyModel.updateMatrixWorld(true);
   prepareModelMaterialsCustom(bodyModel);
+  bodyModel.traverse((child) => {
+    if ((child.isMesh || child.isSkinnedMesh) && (child.name || '').toLowerCase().includes('mcheek')) {
+      child.visible = false;
+    }
+  });
   collectMaterialRefs(bodyModel, matRefs);
 
   // Find the Head bone so we can attach hair to it
@@ -325,7 +310,7 @@ async function loadBody() {
   }
 
   console.log(
-    `Body loaded — eye:${matRefs.eye.length} mouth:${matRefs.mouth.length} cheek:${matRefs.cheek.length} skin:${matRefs.skin.length}`,
+    `Body loaded — eye:${matRefs.eye.length} mouth:${matRefs.mouth.length} skin:${matRefs.skin.length}`,
   );
 }
 
@@ -523,11 +508,6 @@ mouthFrameSlider.addEventListener('input', () => {
   state.mouthFrame = Number(mouthFrameSlider.value);
   mouthFrameVal.textContent = pad2(state.mouthFrame);
   applyMouthTextures();
-});
-
-cheekPicker.addEventListener('change', () => {
-  state.cheekIndex = Number(cheekPicker.value);
-  applyCheekTexture();
 });
 
 skinColorInput.addEventListener('input', () => {
@@ -991,7 +971,6 @@ async function init() {
     // Apply initial customization
     applyEyeTextures();
     applyMouthTextures();
-    applyCheekTexture();
     applySkinTint();
 
     fitCameraToGroup();
