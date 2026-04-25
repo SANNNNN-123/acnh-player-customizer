@@ -177,7 +177,7 @@ function collectMaterialRefs(model, refs) {
       if (meshName.includes('meye') || meshName.includes('_meye')) refs.eye.push(mat);
       else if (meshName.includes('mmouth') || meshName.includes('_mmouth')) refs.mouth.push(mat);
       else if (meshName.includes('mnose') || meshName.includes('_mnose')) refs.nose.push(mat);
-      else if (meshName.includes('mskin') || meshName.includes('_mskin')) refs.skin.push(mat);
+      else if (meshName.includes('mskin') || meshName.includes('_mskin') || meshName.includes('msocks') || meshName.includes('_msocks')) refs.skin.push(mat);
     }
   });
 }
