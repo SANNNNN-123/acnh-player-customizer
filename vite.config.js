@@ -1,18 +1,26 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 
-const ACNH_EXPORT_ROOT = 'C:/Users/ZUHAIR/Desktop/2026/animalcrossing/ACNH_2.0.0_Exported_Model_DAE+PNG';
-const ACNH_MODEL_ROOT = path.join(ACNH_EXPORT_ROOT, 'Model');
 const SUFFIX = '.Nin_NX_NVN';
 
-function clothingApiPlugin() {
+function requireAcnhModelRoot(env) {
+  const raw = env.VITE_ACNH_MODEL_ROOT?.trim();
+  if (!raw) {
+    throw new Error(
+      'Missing VITE_ACNH_MODEL_ROOT. Copy .env.example to .env in acnh-player-customizer/ and set the path to the ACNH "Model" folder.',
+    );
+  }
+  return path.resolve(raw).replace(/\\/g, '/');
+}
+
+function clothingApiPlugin(modelRoot) {
   let folderCache = null;
   let cacheTime = 0;
 
   async function getAllFolders() {
     if (folderCache && Date.now() - cacheTime < 30000) return folderCache;
-    const dirents = await fs.readdir(ACNH_MODEL_ROOT, { withFileTypes: true });
+    const dirents = await fs.readdir(modelRoot, { withFileTypes: true });
     folderCache = dirents
       .filter((d) => d.isDirectory() && d.name.endsWith(SUFFIX))
       .map((d) => d.name.slice(0, -SUFFIX.length));
@@ -40,14 +48,23 @@ function clothingApiPlugin() {
   };
 }
 
-export default defineConfig({
-  server: {
-    fs: {
-      allow: [process.cwd(), ACNH_EXPORT_ROOT],
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  const ACNH_MODEL_ROOT = requireAcnhModelRoot(env);
+  const ACNH_EXPORT_ROOT = path.resolve(ACNH_MODEL_ROOT, '..');
+
+  return {
+    define: {
+      'import.meta.env.VITE_ACNH_MODEL_ROOT': JSON.stringify(ACNH_MODEL_ROOT),
     },
-    watch: {
-      ignored: ['**/public/models/**'],
+    server: {
+      fs: {
+        allow: [process.cwd(), ACNH_EXPORT_ROOT],
+      },
+      watch: {
+        ignored: ['**/public/models/**'],
+      },
     },
-  },
-  plugins: [clothingApiPlugin()],
+    plugins: [clothingApiPlugin(ACNH_MODEL_ROOT)],
+  };
 });

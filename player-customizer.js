@@ -4,8 +4,8 @@ import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
 import { upgradeMaterial } from './lib.js';
 
 // ── Config ─────────────────────────────────────────────────────────────────────
-const ACNH_MODEL_ROOT =
-  'C:/Users/ZUHAIR/Desktop/2026/animalcrossing/ACNH_2.0.0_Exported_Model_DAE+PNG/Model';
+// Set in .env (VITE_ACNH_MODEL_ROOT); see .env.example
+const ACNH_MODEL_ROOT = import.meta.env.VITE_ACNH_MODEL_ROOT;
 const SUFFIX = '.Nin_NX_NVN';
 
 const HAIR_COUNT = 48;   // PlayerHair00 … PlayerHair47
@@ -19,7 +19,8 @@ function pad2(n) {
 }
 
 function folderUrl(folderName) {
-  return `/@fs/${encodeURI(`${ACNH_MODEL_ROOT}/${folderName}${SUFFIX}`)}`;
+  // @fs + absolute path (no extra slash) — /@fs//home/... is invalid and can confuse the dev server
+  return `/@fs${encodeURI(`${ACNH_MODEL_ROOT}/${folderName}${SUFFIX}`)}`;
 }
 
 function fileUrl(folderName, fileName) {
