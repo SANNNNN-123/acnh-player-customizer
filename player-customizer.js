@@ -27,6 +27,22 @@ function fileUrl(folderName, fileName) {
   return `${folderUrl(folderName)}/${encodeURIComponent(fileName)}`;
 }
 
+/** `?debugFace=1` or `localStorage.setItem('DEBUG_ACNH_FACE','1')` → verbose face logs */
+const FACE_DEBUG = (() => {
+  try {
+    return (
+      new URLSearchParams(window.location.search).has('debugFace')
+      || localStorage.getItem('DEBUG_ACNH_FACE') === '1'
+    );
+  } catch {
+    return false;
+  }
+})();
+
+function debugFace(...args) {
+  if (FACE_DEBUG) console.log('[ACNH face]', ...args);
+}
+
 // ── DOM refs ───────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('viewer');
 const loadingEl = document.getElementById('loading');
@@ -125,7 +141,16 @@ const state = {
 // ── Texture helpers ────────────────────────────────────────────────────────────
 function getCachedTexture(url, isColor, refTex) {
   if (!textureCache.has(url)) {
-    const tex = textureLoader.load(url);
+    const tex = textureLoader.load(
+      url,
+      () => {
+        debugFace('texture ok', url.slice(-72));
+      },
+      undefined,
+      (err) => {
+        console.error('[ACNH] Texture load failed:', url, err);
+      },
+    );
     tex.colorSpace = isColor ? THREE.SRGBColorSpace : THREE.NoColorSpace;
     if (refTex) {
       tex.flipY = refTex.flipY;
@@ -140,12 +165,174 @@ function getCachedTexture(url, isColor, refTex) {
 
 function setMaterialTextures(mat, albUrl, nrmUrl, mixUrl) {
   const refMap = mat.map;
-  const refNrm = mat.normalMap;
-  const refMix = mat.roughnessMap;
   if (albUrl) mat.map = getCachedTexture(albUrl, true, refMap);
-  if (nrmUrl) mat.normalMap = getCachedTexture(nrmUrl, false, refNrm);
-  if (mixUrl) mat.roughnessMap = getCachedTexture(mixUrl, false, refMix);
+  // Eye/mouth use MeshBasicMaterial — only the albedo map applies.
+  if (mat.isMeshStandardMaterial) {
+    const refNrm = mat.normalMap;
+    const refMix = mat.roughnessMap;
+    if (nrmUrl) mat.normalMap = getCachedTexture(nrmUrl, false, refNrm);
+    if (mixUrl) mat.roughnessMap = getCachedTexture(mixUrl, false, refMix);
+  }
   mat.needsUpdate = true;
+}
+
+/** ACNH skin/cheek maps are for Nintendo's skin shader, not MeshStandardMaterial. */
+function stripAcnhSkinShaderTextures(mat) {
+  mat.map = null;
+  mat.normalMap = null;
+  mat.roughnessMap = null;
+  mat.metalnessMap = null;
+  mat.roughness = 0.95;
+  mat.metalness = 0;
+  mat.needsUpdate = true;
+}
+
+/** ACNH stores mask data in vertex COLOR; Three.js multiplies it into the shade if enabled. */
+function stripColladaVertexColorAttributes(model) {
+  model.traverse((child) => {
+    if (!child.isMesh && !child.isSkinnedMesh) return;
+    const g = child.geometry;
+    if (g?.getAttribute('color')) {
+      debugFace('strip vertex color attr:', child.name || '(no name)');
+      g.deleteAttribute('color');
+    }
+    const mats = Array.isArray(child.material) ? child.material : [child.material];
+    for (const mat of mats) {
+      if (mat) mat.vertexColors = false;
+    }
+  });
+}
+
+/**
+ * Paint__mPaint uses mPaint_Alb — a Nintendo mask, not RGB skin. As a diffuse map it draws
+ * black/white slabs across the forehead and mid-face in Three.js.
+ */
+function hideAcnhFacePaintMaskMesh(model) {
+  let hidden = 0;
+  model.traverse((child) => {
+    if (!child.isMesh && !child.isSkinnedMesh) return;
+    const n = (child.name || '').toLowerCase();
+    if (n.includes('mpaint') || (n.includes('paint') && n.includes('__'))) {
+      child.visible = false;
+      hidden += 1;
+    }
+  });
+  if (hidden > 0) {
+    console.info(
+      `[ACNH] Hid ${hidden} face paint mesh(es) (e.g. Paint__mPaint). mPaint_Alb is a shader mask, not a PBR color map.`,
+    );
+  }
+}
+
+function whenMapImageReady(tex, fn) {
+  if (!tex?.image) return;
+  const img = tex.image;
+  if (img.complete && img.naturalWidth > 0) {
+    queueMicrotask(() => fn(tex));
+    return;
+  }
+  img.addEventListener('load', () => fn(tex), { once: true });
+}
+
+/** ACNH eye/mouth PNGs are often RGB-only; near-black is “empty” in-game. Write alpha for MeshBasicMaterial. */
+function acnhDecalTextureWithBlackKeyAlpha(sourceTex) {
+  const img = sourceTex.image;
+  if (!img?.naturalWidth) return null;
+  const W = img.naturalWidth;
+  const H = img.naturalHeight;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  const d = ctx.getImageData(0, 0, W, H);
+  const o = d.data;
+  for (let i = 0; i < o.length; i += 4) {
+    const mx = Math.max(o[i], o[i + 1], o[i + 2]);
+    if (mx < 5) o[i + 3] = 0;
+    else if (mx < 28) o[i + 3] = Math.round(((mx - 5) / 23) * 255);
+    else o[i + 3] = 255;
+  }
+  ctx.putImageData(d, 0, 0);
+  const out = new THREE.CanvasTexture(canvas);
+  out.colorSpace = THREE.SRGBColorSpace;
+  out.needsUpdate = true;
+  out.flipY = sourceTex.flipY;
+  out.wrapS = sourceTex.wrapS;
+  out.wrapT = sourceTex.wrapT;
+  return out;
+}
+
+function applyAcnhDecalBlackKeyAlpha(mat, label) {
+  if (!mat?.isMeshBasicMaterial || !mat.map) return;
+  whenMapImageReady(mat.map, () => {
+    try {
+      const processed = acnhDecalTextureWithBlackKeyAlpha(mat.map);
+      if (processed) {
+        mat.map = processed;
+        mat.needsUpdate = true;
+        debugFace('decal black-key alpha baked:', label);
+      }
+    } catch (e) {
+      console.warn('[ACNH] decal alpha bake failed:', label, e);
+    }
+  });
+}
+
+function snapMaterial(mat) {
+  if (!mat) return null;
+  const map = mat.map;
+  let mapHint;
+  if (map?.image) {
+    const img = map.image;
+    mapHint = {
+      srcTail: typeof img.src === 'string' ? img.src.slice(-88) : '(no src)',
+      complete: img.complete,
+      naturalWidth: img.naturalWidth,
+      naturalHeight: img.naturalHeight,
+    };
+  } else {
+    mapHint = map ? '(map set, no image yet)' : null;
+  }
+  return {
+    type: mat.type,
+    name: mat.name,
+    isBasic: mat.isMeshBasicMaterial === true,
+    isStandard: mat.isMeshStandardMaterial === true,
+    vertexColors: mat.vertexColors,
+    transparent: mat.transparent,
+    opacity: mat.opacity,
+    alphaTest: mat.alphaTest,
+    depthWrite: mat.depthWrite,
+    colorHex: mat.color?.getHexString?.(),
+    roughness: mat.roughness,
+    metalness: mat.metalness,
+    hasMap: !!map,
+    mapHint,
+    hasNormalMap: !!mat.normalMap,
+    hasRoughnessMap: !!mat.roughnessMap,
+  };
+}
+
+/** When FACE_DEBUG: dump face-related meshes after material pipeline. */
+function debugDumpFaceMeshes(model, phase) {
+  if (!FACE_DEBUG || !model) return;
+  const re = /(meye|mmouth|mcheek|mskin|mnose|paint|sock)/i;
+  debugFace(`── mesh dump (${phase}) ──`);
+  model.traverse((child) => {
+    if (!child.isMesh && !child.isSkinnedMesh) return;
+    const n = child.name || '';
+    if (!re.test(n)) return;
+    const mats = Array.isArray(child.material) ? child.material : [child.material];
+    debugFace('mesh:', n, { isSkinnedMesh: child.isSkinnedMesh, matCount: mats.length });
+    mats.forEach((mat, i) => {
+      debugFace(`  [${i}]`, snapMaterial(mat));
+    });
+    const g = child.geometry;
+    if (g?.attributes) {
+      debugFace('  geometry attributes:', Object.keys(g.attributes));
+    }
+  });
 }
 
 // ── Model loading ──────────────────────────────────────────────────────────────
@@ -174,10 +361,30 @@ function collectMaterialRefs(model, refs) {
     const mats = Array.isArray(child.material) ? child.material : [child.material];
     for (const mat of mats) {
       if (!mat) continue;
-      if (meshName.includes('meye') || meshName.includes('_meye')) refs.eye.push(mat);
-      else if (meshName.includes('mmouth') || meshName.includes('_mmouth')) refs.mouth.push(mat);
+      if (meshName.includes('meye') || meshName.includes('_meye')) {
+        debugFace('collect: eye ref', child.name, snapMaterial(mat));
+        refs.eye.push(mat);
+      } else if (meshName.includes('mmouth') || meshName.includes('_mmouth')) {
+        debugFace('collect: mouth ref', child.name, snapMaterial(mat));
+        refs.mouth.push(mat);
+      }
+      else if (meshName.includes('mcheek') || meshName.includes('_mcheek')) {
+        debugFace('collect: cheek → strip + skinRefs', child.name, snapMaterial(mat));
+        stripAcnhSkinShaderTextures(mat);
+        refs.skin.push(mat);
+      }
       else if (meshName.includes('mnose') || meshName.includes('_mnose')) refs.nose.push(mat);
-      else if (meshName.includes('mskin') || meshName.includes('_mskin') || meshName.includes('msocks') || meshName.includes('_msocks')) refs.skin.push(mat);
+      else if (meshName.includes('mskin') || meshName.includes('_mskin') || meshName.includes('msocks') || meshName.includes('_msocks')) {
+        // mSkin_Alb / mSkin_Mix are not literal PBR maps — using them as albedo + roughness
+        // causes white streaks on the forehead and banding on the torso.
+        if (meshName.includes('mskin') || meshName.includes('_mskin')) {
+          debugFace('collect: skin → strip + skinRefs', child.name, snapMaterial(mat));
+          stripAcnhSkinShaderTextures(mat);
+        } else {
+          debugFace('collect: socks → skinRefs (no strip)', child.name);
+        }
+        refs.skin.push(mat);
+      }
     }
   });
 }
@@ -245,6 +452,7 @@ function applyEyeTextures() {
       fileUrl(folder, `mEye_Nrm.${frame}.png`),
       fileUrl(folder, `mEye_Mix.${frame}.png`),
     );
+    applyAcnhDecalBlackKeyAlpha(mat, `eye ${folder} frame ${frame}`);
   }
 }
 
@@ -258,6 +466,7 @@ function applyMouthTextures() {
       fileUrl(folder, `mMouth_Nrm.${frame}.png`),
       fileUrl(folder, `mMouth_Mix.${frame}.png`),
     );
+    applyAcnhDecalBlackKeyAlpha(mat, `mouth ${folder} frame ${frame}`);
   }
 }
 
@@ -289,11 +498,8 @@ async function loadBody() {
   playerGroup.add(bodyModel);
   bodyModel.updateMatrixWorld(true);
   prepareModelMaterialsCustom(bodyModel);
-  bodyModel.traverse((child) => {
-    if ((child.isMesh || child.isSkinnedMesh) && (child.name || '').toLowerCase().includes('mcheek')) {
-      child.visible = false;
-    }
-  });
+  stripColladaVertexColorAttributes(bodyModel);
+  hideAcnhFacePaintMaskMesh(bodyModel);
   collectMaterialRefs(bodyModel, matRefs);
 
   // Find the Head bone so we can attach hair to it
@@ -310,7 +516,12 @@ async function loadBody() {
   }
 
   console.log(
-    `Body loaded — eye:${matRefs.eye.length} mouth:${matRefs.mouth.length} skin:${matRefs.skin.length}`,
+    `Body loaded — eye:${matRefs.eye.length} mouth:${matRefs.mouth.length} skin:${matRefs.skin.length} nose:${matRefs.nose.length}`,
+  );
+  debugDumpFaceMeshes(bodyModel, 'after collectMaterialRefs');
+  console.info(
+    '[ACNH] Face debug: ?debugFace=1 or localStorage.DEBUG_ACNH_FACE=1 then reload. Texture errors: [ACNH] Texture load failed. Face paint mask mesh is auto-hidden (see log above).',
+    FACE_DEBUG ? '(verbose ON)' : '',
   );
 }
 
@@ -337,6 +548,7 @@ async function loadHair(index) {
     const collada = await loadColladaWithTextures(daeUrl, folder);
     hairModel = collada.scene;
     prepareModelMaterialsCustom(hairModel);
+    stripColladaVertexColorAttributes(hairModel);
 
     playerGroup.add(hairModel);
 
@@ -365,7 +577,12 @@ async function loadHair(index) {
       if (!child.isMesh && !child.isSkinnedMesh) return;
       const mats = Array.isArray(child.material) ? child.material : [child.material];
       for (const mat of mats) {
-        if (mat) matRefs.hair.push(mat);
+        if (!mat) continue;
+        // mHair_Mix is not a PBR roughness map; it creates dark vertical bands in StandardMaterial.
+        mat.roughnessMap = null;
+        mat.roughness = 0.62;
+        mat.needsUpdate = true;
+        matRefs.hair.push(mat);
       }
     });
 
@@ -972,6 +1189,24 @@ async function init() {
     applyEyeTextures();
     applyMouthTextures();
     applySkinTint();
+
+    debugFace('URLs — eye albedo:', fileUrl(`PlayerEye${pad2(state.eyeStyle)}`, `mEye_Alb.${state.eyeFrame}.png`));
+    debugFace('URLs — mouth albedo:', fileUrl(`PlayerMouth${pad2(state.mouthStyle)}`, `mMouth_Alb.${state.mouthFrame}.png`));
+    debugFace('matRefs snapshot:', {
+      eye: matRefs.eye.map(snapMaterial),
+      mouth: matRefs.mouth.map(snapMaterial),
+      skinCount: matRefs.skin.length,
+      noseCount: matRefs.nose.length,
+    });
+    debugDumpFaceMeshes(bodyModel, 'after applyEye/Mouth/SkinTint');
+
+    if (FACE_DEBUG) {
+      setTimeout(() => {
+        debugFace('…after 1.5s (async textures) eye:', matRefs.eye.map(snapMaterial));
+        debugFace('…after 1.5s mouth:', matRefs.mouth.map(snapMaterial));
+        debugDumpFaceMeshes(bodyModel, 'after 1.5s');
+      }, 1500);
+    }
 
     fitCameraToGroup();
 
