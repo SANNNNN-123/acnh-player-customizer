@@ -45,8 +45,10 @@ public/models/
 
 ### 2. Install and run
 
+From the project root:
+
 ```bash
-npm install
+pnpm install
 npm run dev
 ```
 
