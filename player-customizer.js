@@ -121,11 +121,11 @@ let bodyTopWorldY = 0; // Head top in world space — used for hat vertical alig
 
 // Material references found after loading body
 const matRefs = {
-  eye: [],    // materials named mEye
-  mouth: [],  // materials named mMouth
-  skin: [],   // materials named mSkin
-  nose: [],   // materials named mNose
-  hair: [],   // materials from hair model
+  skin: [],
+  nose: [],
+  hair: [],
+  eye: [], // Body__mEye — ACNH decal shader (albedo + black-key alpha in fragment)
+  mouth: [],
 };
 
 const state = {
@@ -166,7 +166,14 @@ function getCachedTexture(url, isColor, refTex) {
 function setMaterialTextures(mat, albUrl, nrmUrl, mixUrl) {
   const refMap = mat.map;
   if (albUrl) mat.map = getCachedTexture(albUrl, true, refMap);
-  // Eye/mouth use MeshBasicMaterial — only the albedo map applies.
+  // Face decals: same lighting as cheek/forehead — only albedo; ACNH Nrm/Mix are not PBR here.
+  if (mat.userData?.acnhFaceDecal) {
+    mat.normalMap = null;
+    mat.roughnessMap = null;
+    mat.metalnessMap = null;
+    mat.needsUpdate = true;
+    return;
+  }
   if (mat.isMeshStandardMaterial) {
     const refNrm = mat.normalMap;
     const refMix = mat.roughnessMap;
@@ -222,61 +229,6 @@ function hideAcnhFacePaintMaskMesh(model) {
       `[ACNH] Hid ${hidden} face paint mesh(es) (e.g. Paint__mPaint). mPaint_Alb is a shader mask, not a PBR color map.`,
     );
   }
-}
-
-function whenMapImageReady(tex, fn) {
-  if (!tex?.image) return;
-  const img = tex.image;
-  if (img.complete && img.naturalWidth > 0) {
-    queueMicrotask(() => fn(tex));
-    return;
-  }
-  img.addEventListener('load', () => fn(tex), { once: true });
-}
-
-/** ACNH eye/mouth PNGs are often RGB-only; near-black is “empty” in-game. Write alpha for MeshBasicMaterial. */
-function acnhDecalTextureWithBlackKeyAlpha(sourceTex) {
-  const img = sourceTex.image;
-  if (!img?.naturalWidth) return null;
-  const W = img.naturalWidth;
-  const H = img.naturalHeight;
-  const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(img, 0, 0);
-  const d = ctx.getImageData(0, 0, W, H);
-  const o = d.data;
-  for (let i = 0; i < o.length; i += 4) {
-    const mx = Math.max(o[i], o[i + 1], o[i + 2]);
-    if (mx < 5) o[i + 3] = 0;
-    else if (mx < 28) o[i + 3] = Math.round(((mx - 5) / 23) * 255);
-    else o[i + 3] = 255;
-  }
-  ctx.putImageData(d, 0, 0);
-  const out = new THREE.CanvasTexture(canvas);
-  out.colorSpace = THREE.SRGBColorSpace;
-  out.needsUpdate = true;
-  out.flipY = sourceTex.flipY;
-  out.wrapS = sourceTex.wrapS;
-  out.wrapT = sourceTex.wrapT;
-  return out;
-}
-
-function applyAcnhDecalBlackKeyAlpha(mat, label) {
-  if (!mat?.isMeshBasicMaterial || !mat.map) return;
-  whenMapImageReady(mat.map, () => {
-    try {
-      const processed = acnhDecalTextureWithBlackKeyAlpha(mat.map);
-      if (processed) {
-        mat.map = processed;
-        mat.needsUpdate = true;
-        debugFace('decal black-key alpha baked:', label);
-      }
-    } catch (e) {
-      console.warn('[ACNH] decal alpha bake failed:', label, e);
-    }
-  });
 }
 
 function snapMaterial(mat) {
@@ -335,6 +287,139 @@ function debugDumpFaceMeshes(model, phase) {
   });
 }
 
+// ── ACNH eye/mouth decals (custom map fragment on MeshBasicMaterial) ──────────
+/** Collada mesh names: token `meye` but not `meyebrow`. */
+function isAcnhEyeSlotMeshName(meshName) {
+  const n = (meshName || '').toLowerCase();
+  if (/(^|[^a-z])meyebrow([^a-z]|$)/i.test(n)) return false;
+  return /(^|[^a-z])meye([^a-z]|$)/i.test(n);
+}
+
+function isAcnhMouthSlotMeshName(meshName) {
+  const n = (meshName || '').toLowerCase();
+  return /(^|[^a-z])mmouth([^a-z]|$)/i.test(n);
+}
+
+/**
+ * Same map slot as cheek `color` + lighting: build albedo = mix(skin `diffuse`, atlas ink, keyed `a`).
+ * Replaces Standard `map_fragment` (was `diffuseColor *= texture`) so “paper” becomes skin tint, ink stays.
+ */
+const ACNH_DECAL_STANDARD_MAP_FRAGMENT = /* glsl */ `
+#ifdef USE_MAP
+	vec4 t = texture2D( map, vMapUv );
+	float mx = max( max( t.r, t.g ), t.b );
+	float mn = min( min( t.r, t.g ), t.b );
+	float sat = mx - mn;
+	float a = 0.0;
+	if ( mx < 0.02745 ) {
+		a = 0.0;
+	} else if ( sat < 0.04706 && mx <= 0.20392 ) {
+		a = 0.0;
+	} else if ( mx < 0.12549 ) {
+		a = clamp( ( mx - 0.02745 ) / ( 0.12549 - 0.02745 ), 0.0, 1.0 );
+	} else {
+		a = 1.0;
+	}
+	vec3 ink = t.rgb;
+	vec3 skinTint = diffuse;
+	vec3 albedo = mix( skinTint, ink, a );
+	diffuseColor = vec4( albedo, opacity );
+#endif
+`.trim();
+
+/** Lit like stripped `Body__mCheek` / `Body__mSkin` — MeshStandard + roughness only, custom albedo from atlas. */
+function createAcnhDecalFaceMaterial(isSkinned) {
+  const mat = new THREE.MeshStandardMaterial({
+    name: 'AcnhFaceDecal',
+    color: 0xffffff,
+    side: THREE.DoubleSide,
+    skinning: isSkinned,
+    roughness: 0.95,
+    metalness: 0,
+    transparent: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+  });
+  mat.userData.acnhFaceDecal = true;
+  mat.customProgramCacheKey = () => 'acnh_decal_standard_cheekmatch_v1';
+  mat.onBeforeCompile = (shader) => {
+    const next = shader.fragmentShader.replace(
+      '#include <map_fragment>',
+      ACNH_DECAL_STANDARD_MAP_FRAGMENT,
+    );
+    if (next === shader.fragmentShader) {
+      console.warn('[ACNH] Eye/mouth decal: #include <map_fragment> not found; shader patch skipped.');
+    }
+    shader.fragmentShader = next;
+  };
+  return mat;
+}
+
+/** After Standard upgrade: swap eye/mouth to decal shader; keep Collada albedo map ref only. */
+function installAcnhFaceDecalMaterials(model) {
+  model.traverse((child) => {
+    if (!child.isMesh && !child.isSkinnedMesh) return;
+    const nm = child.name || '';
+    if (!isAcnhEyeSlotMeshName(nm) && !isAcnhMouthSlotMeshName(nm)) return;
+
+    const old = child.material;
+    const list = Array.isArray(old) ? old : [old];
+    const first = list[0];
+    if (!first) return;
+
+    let preservedMap = null;
+    for (const m of list) {
+      if (!m) continue;
+      if (m.map && !preservedMap) preservedMap = m.map;
+      m.map = null;
+      m.normalMap = null;
+      m.roughnessMap = null;
+      m.metalnessMap = null;
+      m.dispose();
+    }
+
+    const decalMat = createAcnhDecalFaceMaterial(child.isSkinnedMesh);
+    if (preservedMap) {
+      preservedMap.colorSpace = THREE.SRGBColorSpace;
+      preservedMap.generateMipmaps = false;
+      preservedMap.minFilter = THREE.LinearFilter;
+      preservedMap.magFilter = THREE.LinearFilter;
+      decalMat.map = preservedMap;
+    }
+    child.material = decalMat;
+  });
+}
+
+/**
+ * Decal albedo comes from TextureLoader async — never set needsUpdate until `image` has pixels,
+ * or Three warns: "Texture marked for update but no image data found."
+ */
+function configureDecalAlbedoTexture(tex, mat) {
+  if (!tex) return;
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  const bump = () => {
+    const img = tex.image;
+    if (img?.naturalWidth > 0) {
+      tex.needsUpdate = true;
+      if (mat) mat.needsUpdate = true;
+    }
+  };
+  bump();
+  const img = tex.image;
+  if (img?.naturalWidth > 0) return;
+  if (img && typeof img.addEventListener === 'function') {
+    img.addEventListener('load', bump, { once: true });
+    img.addEventListener(
+      'error',
+      () => console.warn('[ACNH] Decal albedo image error (check path / VITE_ACNH_MODEL_ROOT).'),
+      { once: true },
+    );
+  }
+}
+
 // ── Model loading ──────────────────────────────────────────────────────────────
 function prepareModelMaterialsCustom(model) {
   let count = 0;
@@ -361,11 +446,11 @@ function collectMaterialRefs(model, refs) {
     const mats = Array.isArray(child.material) ? child.material : [child.material];
     for (const mat of mats) {
       if (!mat) continue;
-      if (meshName.includes('meye') || meshName.includes('_meye')) {
-        debugFace('collect: eye ref', child.name, snapMaterial(mat));
+      if (isAcnhEyeSlotMeshName(meshName)) {
+        debugFace('collect: eye → decal refs', child.name, snapMaterial(mat));
         refs.eye.push(mat);
-      } else if (meshName.includes('mmouth') || meshName.includes('_mmouth')) {
-        debugFace('collect: mouth ref', child.name, snapMaterial(mat));
+      } else if (isAcnhMouthSlotMeshName(meshName)) {
+        debugFace('collect: mouth → decal refs', child.name, snapMaterial(mat));
         refs.mouth.push(mat);
       }
       else if (meshName.includes('mcheek') || meshName.includes('_mcheek')) {
@@ -452,7 +537,8 @@ function applyEyeTextures() {
       fileUrl(folder, `mEye_Nrm.${frame}.png`),
       fileUrl(folder, `mEye_Mix.${frame}.png`),
     );
-    applyAcnhDecalBlackKeyAlpha(mat, `eye ${folder} frame ${frame}`);
+    configureDecalAlbedoTexture(mat.map, mat);
+    mat.needsUpdate = true;
   }
 }
 
@@ -466,7 +552,8 @@ function applyMouthTextures() {
       fileUrl(folder, `mMouth_Nrm.${frame}.png`),
       fileUrl(folder, `mMouth_Mix.${frame}.png`),
     );
-    applyAcnhDecalBlackKeyAlpha(mat, `mouth ${folder} frame ${frame}`);
+    configureDecalAlbedoTexture(mat.map, mat);
+    mat.needsUpdate = true;
   }
 }
 
@@ -477,6 +564,14 @@ function applySkinTint() {
     mat.needsUpdate = true;
   }
   for (const mat of matRefs.nose) {
+    mat.color.copy(color);
+    mat.needsUpdate = true;
+  }
+  for (const mat of matRefs.eye) {
+    mat.color.copy(color);
+    mat.needsUpdate = true;
+  }
+  for (const mat of matRefs.mouth) {
     mat.color.copy(color);
     mat.needsUpdate = true;
   }
@@ -498,6 +593,7 @@ async function loadBody() {
   playerGroup.add(bodyModel);
   bodyModel.updateMatrixWorld(true);
   prepareModelMaterialsCustom(bodyModel);
+  installAcnhFaceDecalMaterials(bodyModel);
   stripColladaVertexColorAttributes(bodyModel);
   hideAcnhFacePaintMaskMesh(bodyModel);
   collectMaterialRefs(bodyModel, matRefs);
@@ -1190,8 +1286,6 @@ async function init() {
     applyMouthTextures();
     applySkinTint();
 
-    debugFace('URLs — eye albedo:', fileUrl(`PlayerEye${pad2(state.eyeStyle)}`, `mEye_Alb.${state.eyeFrame}.png`));
-    debugFace('URLs — mouth albedo:', fileUrl(`PlayerMouth${pad2(state.mouthStyle)}`, `mMouth_Alb.${state.mouthFrame}.png`));
     debugFace('matRefs snapshot:', {
       eye: matRefs.eye.map(snapMaterial),
       mouth: matRefs.mouth.map(snapMaterial),
@@ -1202,8 +1296,6 @@ async function init() {
 
     if (FACE_DEBUG) {
       setTimeout(() => {
-        debugFace('…after 1.5s (async textures) eye:', matRefs.eye.map(snapMaterial));
-        debugFace('…after 1.5s mouth:', matRefs.mouth.map(snapMaterial));
         debugDumpFaceMeshes(bodyModel, 'after 1.5s');
       }, 1500);
     }
