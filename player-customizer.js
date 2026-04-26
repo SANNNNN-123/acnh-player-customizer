@@ -129,12 +129,12 @@ const matRefs = {
 };
 
 const state = {
-  hairIndex: 0,
+  hairIndex: 18,
   eyeStyle: 0,
   eyeFrame: 0,
   mouthStyle: 0,
   mouthFrame: 0,
-  skinColor: '#fdd5b1',
+  skinColor: '#f5cba8', // matches 2nd face-panel swatch (choice 2)
   hairColor: '#5b3a1a',
 };
 
@@ -877,6 +877,15 @@ const BOTTOM_SILHOUETTES = [
   { mesh: 'PlayerBottomsSkirtLong', label: 'Skirt Long', texPrefix: 'BottomsTexSkirtLong' },
 ];
 
+/** Initial outfit (folder names without `.Nin_NX_NVN`; must exist under `VITE_ACNH_MODEL_ROOT`). */
+const DEFAULT_OUTFIT = {
+  topMesh: 'PlayerTopsTopCoatL',
+  topTex: 'TopsTexTopCoatLRain1',
+  bottomMesh: 'PlayerBottomsPantsWide',
+  bottomTex: 'BottomsTexPantsWideRain1',
+  shoesFolder: 'ShoesHighcutMouton3',
+};
+
 let clothingTextureLists = {};
 let topModel = null;
 let bottomModel = null;
@@ -1063,6 +1072,14 @@ function populateClothingPickers() {
   }
 }
 
+function appendShoesPickerOption(folderName) {
+  if ([...shoesPickerEl.options].some((o) => o.value === folderName)) return;
+  const opt = document.createElement('option');
+  opt.value = folderName;
+  opt.textContent = folderName.replace(/^Shoes/, '').replace(/(\d+)$/, ' $1');
+  shoesPickerEl.append(opt);
+}
+
 async function populateShoesPicker() {
   try {
     const resp = await fetch('/api/scan-folders?prefix=Shoes');
@@ -1070,21 +1087,53 @@ async function populateShoesPicker() {
     const all = await resp.json();
     const seen = new Set();
     for (const name of all) {
-      if (!name.includes('.dae')) {
-        // Only add folders that contain a DAE (shoes folders have their own DAE)
-      }
       if (seen.size >= 60) break;
       if (seen.has(name)) continue;
       seen.add(name);
-      const opt = document.createElement('option');
-      opt.value = name;
-      const label = name.replace(/^Shoes/, '').replace(/(\d+)$/, ' $1');
-      opt.textContent = label;
-      shoesPickerEl.append(opt);
+      appendShoesPickerOption(name);
     }
+    // Picker is capped; always allow the default load-out folder if scan order skipped it.
+    appendShoesPickerOption(DEFAULT_OUTFIT.shoesFolder);
   } catch (err) {
     console.warn('Failed to populate shoes picker:', err);
   }
+}
+
+async function applyDefaultOutfit() {
+  const topIdx = TOP_SILHOUETTES.findIndex((s) => s.mesh === DEFAULT_OUTFIT.topMesh);
+  const botIdx = BOTTOM_SILHOUETTES.findIndex((s) => s.mesh === DEFAULT_OUTFIT.bottomMesh);
+  if (topIdx < 0 || botIdx < 0) {
+    console.warn('[ACNH] Default outfit: silhouette not found');
+    return;
+  }
+
+  topSilhouetteEl.value = String(topIdx);
+  const topSil = TOP_SILHOUETTES[topIdx];
+  const topTexes = await scanClothingTextures(topSil.texPrefix);
+  populateTextureDropdown(topTextureEl, topTexes, topSil.texPrefix);
+  if (topTexes.includes(DEFAULT_OUTFIT.topTex)) {
+    topTextureEl.value = DEFAULT_OUTFIT.topTex;
+    await loadTop(topIdx, DEFAULT_OUTFIT.topTex);
+  } else {
+    console.warn('[ACNH] Default top texture missing:', DEFAULT_OUTFIT.topTex);
+  }
+
+  bottomSilhouetteEl.value = String(botIdx);
+  const botSil = BOTTOM_SILHOUETTES[botIdx];
+  const botTexes = await scanClothingTextures(botSil.texPrefix);
+  populateTextureDropdown(bottomTextureEl, botTexes, botSil.texPrefix);
+  if (botTexes.includes(DEFAULT_OUTFIT.bottomTex)) {
+    bottomTextureEl.value = DEFAULT_OUTFIT.bottomTex;
+    await loadBottom(botIdx, DEFAULT_OUTFIT.bottomTex);
+  } else {
+    console.warn('[ACNH] Default bottom texture missing:', DEFAULT_OUTFIT.bottomTex);
+  }
+
+  appendShoesPickerOption(DEFAULT_OUTFIT.shoesFolder);
+  shoesPickerEl.value = DEFAULT_OUTFIT.shoesFolder;
+  await loadShoes(DEFAULT_OUTFIT.shoesFolder);
+
+  updatePreviewTags();
 }
 
 function populateHatCategories() {
@@ -1271,6 +1320,7 @@ randomizeBtn.addEventListener('click', async () => {
 // ── Init ───────────────────────────────────────────────────────────────────────
 async function init() {
   populatePickers();
+  hairPicker.value = String(state.hairIndex);
 
   loadingEl.classList.remove('hidden');
   loadingEl.querySelector('p').textContent = 'Loading player body…';
@@ -1318,6 +1368,7 @@ async function init() {
     populateClothingPickers();
     populateHatCategories();
     await populateShoesPicker();
+    await applyDefaultOutfit();
 
     initSteppers();
     syncSkinSwatchHighlight();
