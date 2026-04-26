@@ -65,6 +65,52 @@ const randomizeLabel = randomizeBtn?.querySelector('.randomize-label');
 const hatCategoryEl = document.getElementById('hatCategory');
 const hatStyleEl = document.getElementById('hatStyle');
 const shoesPickerEl = document.getElementById('shoesPicker');
+const skinColorTrigger = document.getElementById('skinColorTrigger');
+const hairColorTrigger = document.getElementById('hairColorTrigger');
+
+/** Move hidden `<input type="color">` under the trigger so the OS picker opens there, not mid-screen. */
+function placeColorInputBelowTrigger(input, trigger) {
+  if (!trigger) return;
+  const r = trigger.getBoundingClientRect();
+  const margin = 12;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const iw = 40;
+  const ih = 40;
+  const gap = 8;
+  // Conservative box for GTK/Chrome color dialogs so we can clamp to the viewport.
+  const estPickerW = 400;
+  const estPickerH = 340;
+
+  let left = r.left + (r.width - iw) / 2;
+  left = Math.min(left, vw - margin - estPickerW);
+  left = Math.max(margin, left);
+
+  let top = r.bottom + gap;
+  if (top + estPickerH > vh - margin) {
+    top = Math.max(margin, r.top - estPickerH - gap);
+  }
+  top = Math.min(top, vh - margin - ih);
+
+  input.style.left = `${Math.round(left)}px`;
+  input.style.top = `${Math.round(top)}px`;
+  input.style.transform = 'none';
+}
+
+/** Open native color UI near the rainbow button; horizontal clamp keeps the right edge on-screen. */
+function openAnchoredColorPicker(input, hex, trigger) {
+  input.value = hex;
+  placeColorInputBelowTrigger(input, trigger);
+  try {
+    if (typeof input.showPicker === 'function') {
+      input.showPicker();
+      return;
+    }
+  } catch {
+    /* showPicker can throw if unsupported or blocked */
+  }
+  input.click();
+}
 
 // ── Three.js setup ─────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -799,6 +845,16 @@ hairColor.addEventListener('input', () => {
   state.hairColor = hairColor.value;
   syncHairSwatchHighlight();
   applyHairColor();
+});
+
+skinColorTrigger?.addEventListener('click', (e) => {
+  e.preventDefault();
+  openAnchoredColorPicker(skinColorInput, state.skinColor, skinColorTrigger);
+});
+
+hairColorTrigger?.addEventListener('click', (e) => {
+  e.preventDefault();
+  openAnchoredColorPicker(hairColor, state.hairColor, hairColorTrigger);
 });
 
 eyeStylePicker.addEventListener('change', () => {

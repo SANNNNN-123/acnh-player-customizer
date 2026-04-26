@@ -281,10 +281,19 @@ canvas#viewer {
   overflow: hidden;
 }
 
-.swatch--rainbow input[type='color'] {
-  opacity: 0;
-  width: 120%;
-  height: 120%;
+/* Native color UI anchors to this node; `left`/`top` are set in JS under the rainbow button. */
+.forge-color-input-anchor {
+  position: fixed;
+  z-index: 2147483646;
+  left: -9999px;
+  top: -9999px;
+  width: 40px;
+  height: 40px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0.02;
+  pointer-events: none;
   cursor: pointer;
 }
 

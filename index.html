@@ -142,9 +142,13 @@
               <button type="button" class="swatch" data-skin="#b8875a" style="--swatch: #b8875a" aria-label="Skin tone"></button>
               <button type="button" class="swatch" data-skin="#8d5e3c" style="--swatch: #8d5e3c" aria-label="Skin tone"></button>
               <button type="button" class="swatch" data-skin="#5c3d28" style="--swatch: #5c3d28" aria-label="Skin tone dark"></button>
-              <label class="swatch swatch--rainbow" title="Custom skin color">
-                <input type="color" id="skinColor" value="#f5cba8" />
-              </label>
+              <button
+                type="button"
+                class="swatch swatch--rainbow"
+                id="skinColorTrigger"
+                title="Custom skin color"
+                aria-label="Custom skin color"
+              ></button>
             </div>
           </div>
         </div>
@@ -168,9 +172,13 @@
               <button type="button" class="swatch" data-hair="#c9a227" style="--swatch: #c9a227" aria-label="Hair blonde"></button>
               <button type="button" class="swatch" data-hair="#e8d5a3" style="--swatch: #e8d5a3" aria-label="Hair light"></button>
               <button type="button" class="swatch" data-hair="#c04040" style="--swatch: #c04040" aria-label="Hair red"></button>
-              <label class="swatch swatch--rainbow" title="Custom hair color">
-                <input type="color" id="hairColor" value="#5b3a1a" />
-              </label>
+              <button
+                type="button"
+                class="swatch swatch--rainbow"
+                id="hairColorTrigger"
+                title="Custom hair color"
+                aria-label="Custom hair color"
+              ></button>
             </div>
           </div>
         </div>
@@ -218,6 +226,10 @@
       <div class="spinner"></div>
       <p>Loading player model…</p>
     </div>
+
+    <!-- Anchored in the viewport so the OS color picker is not clipped / opened off-screen (right panel). -->
+    <input type="color" id="skinColor" class="forge-color-input-anchor" value="#f5cba8" tabindex="-1" aria-hidden="true" />
+    <input type="color" id="hairColor" class="forge-color-input-anchor" value="#5b3a1a" tabindex="-1" aria-hidden="true" />
 
     <script type="module" src="/player-customizer.js"></script>
   </body>
