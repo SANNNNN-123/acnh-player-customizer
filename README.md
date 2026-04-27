@@ -2,6 +2,10 @@
 
 A 3D player character customizer built with Three.js using extracted Animal Crossing: New Horizons model data (DAE + PNG).
 
+## Preview
+
+![ACNH Player Customizer](preview.gif)
+
 ## Features
 
 - **Hair** — 48 hairstyles with color picker
